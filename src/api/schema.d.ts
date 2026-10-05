@@ -4,6 +4,27 @@
  */
 
 export interface paths {
+    "/api/allocation/proposal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Proposal
+         * @description Whole-share rebalance proposal toward the 90% core + 10% trend targets, with per-ETF drift against its band,
+         *     group mix and the trend sleeve detail. Advisory only (404 `no_holdings` when the CSV is missing).
+         */
+        get: operations["get_proposal_api_allocation_proposal_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/backtest/run": {
         parameters: {
             query?: never;
@@ -304,6 +325,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/portfolio/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Overview
+         * @description Value, day change, accounts, growth of 100 vs the monthly-rebalanced 60/40, drawdown and allocation by
+         *     asset group, from the owner's holdings CSV (404 `no_holdings` when it is missing). Fetches prices, so it
+         *     shares the heavy-endpoint cap (429 when busy).
+         */
+        get: operations["get_overview_api_portfolio_overview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/results/ml/latest": {
         parameters: {
             query?: never;
@@ -356,6 +399,50 @@ export interface paths {
          * @description Latest nightly technical scan (validated / OOS-positive candidates): payload, generated_at, stale flag.
          */
         get: operations["latest_technical_api_results_technical_latest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/risk/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Risk Status
+         * @description Sleeve value, peak, drawdown ladder with dollars of room, halt / kill switch / reconcile / mode, limits used
+         *     vs maximum, equity history and the order decisions of the last 30 days. 503 `state_not_initialized` until
+         *     `main.py risk init` has been run.
+         */
+        get: operations["get_risk_status_api_risk_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/scanner/candidate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Candidate
+         * @description Walk-forward, hold-out, null and cost-stress validation of one (symbol, pattern) executable candidate:
+         *     OOS vs in-sample curves, trade returns, each gate measured against its bar, and the chart's bars and
+         *     trades. Heavy (shares the cap: 429 when busy).
+         */
+        get: operations["get_candidate_api_scanner_candidate_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -428,6 +515,17 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AccountValue */
+        AccountValue: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Share */
+            share?: number | null;
+            /** Value */
+            value: number;
+        };
         /** BacktestRequest */
         BacktestRequest: {
             /**
@@ -481,6 +579,84 @@ export interface components {
              * @default unvalidated
              */
             validation_status?: string;
+        };
+        /** BarOut */
+        BarOut: {
+            /** Close */
+            close: number;
+            /** Date */
+            date: string;
+            /** High */
+            high: number;
+            /** Low */
+            low: number;
+            /** Open */
+            open: number;
+        };
+        /** CandidateResponse */
+        CandidateResponse: {
+            /** As Of */
+            as_of?: string | null;
+            /** Avg Loss */
+            avg_loss?: number | null;
+            /** Avg Win */
+            avg_win?: number | null;
+            /** Bars */
+            bars: components["schemas"]["BarOut"][];
+            /** Day Change */
+            day_change?: number | null;
+            /** Day Change Pct */
+            day_change_pct?: number | null;
+            /** Gates */
+            gates: components["schemas"]["Gate"][];
+            /** Gates Failed */
+            gates_failed: number;
+            /**
+             * Holdout Frozen
+             * @default false
+             */
+            holdout_frozen?: boolean;
+            /** Holdout Return */
+            holdout_return?: number | null;
+            /** Holdout Start */
+            holdout_start: string;
+            /** In Sample Curve */
+            in_sample_curve: components["schemas"]["CurvePoint"][];
+            /** In Sample Method */
+            in_sample_method: string;
+            /** In Sample Return */
+            in_sample_return?: number | null;
+            /** Last Price */
+            last_price?: number | null;
+            /** N Oos Trades */
+            n_oos_trades: number;
+            nightly: components["schemas"]["NightlyRef"];
+            /** Note */
+            note: string;
+            /** Oos Curve */
+            oos_curve: components["schemas"]["CurvePoint"][];
+            /** Oos Return */
+            oos_return?: number | null;
+            /** Oos Trade Returns */
+            oos_trade_returns: number[];
+            /** Pattern */
+            pattern: string;
+            /** Rejected Reasons */
+            rejected_reasons: string[];
+            /** Symbol */
+            symbol: string;
+            /** Trades */
+            trades: components["schemas"]["TradeMarker"][];
+            /** Variant */
+            variant: string;
+            /** Verdict */
+            verdict: string;
+            /** Win Rate */
+            win_rate?: number | null;
+            /** Win Rate Ci High */
+            win_rate_ci_high?: number | null;
+            /** Win Rate Ci Low */
+            win_rate_ci_low?: number | null;
         };
         /** ConfigBacktest */
         ConfigBacktest: {
@@ -545,10 +721,41 @@ export interface components {
             /** Signal Recency Days */
             signal_recency_days: number;
         };
+        /** CurvePoint */
+        CurvePoint: {
+            /** Date */
+            date: string;
+            /** Value */
+            value: number;
+        };
         /** DataStatusResponse */
         DataStatusResponse: {
             /** Symbols */
             symbols: components["schemas"]["StoreSymbolStatus"][];
+        };
+        /** DecisionRow */
+        DecisionRow: {
+            /** Reasons */
+            reasons: string[];
+            /** Side */
+            side?: string | null;
+            /** Source */
+            source: string;
+            /** Status */
+            status: string;
+            /** Symbol */
+            symbol?: string | null;
+            /** Ts */
+            ts: string;
+        };
+        /** EquityHistoryPoint */
+        EquityHistoryPoint: {
+            /** Peak */
+            peak?: number | null;
+            /** Sleeve Equity */
+            sleeve_equity: number;
+            /** Ts */
+            ts: string;
         };
         /** EquityPoint */
         EquityPoint: {
@@ -585,6 +792,60 @@ export interface components {
             /** Importance */
             importance?: number | null;
         };
+        /**
+         * Funnel
+         * @description How many candidates of the nightly run survive each gate in turn (every stage is a subset of the last).
+         */
+        Funnel: {
+            /** Bh */
+            bh: number;
+            /** Min Trades */
+            min_trades: number;
+            /** Oos Positive */
+            oos_positive: number;
+            /** Orders */
+            orders: number;
+            /** Psr */
+            psr: number;
+            /** Tested */
+            tested: number;
+        };
+        /** Gate */
+        Gate: {
+            /** Comparator */
+            comparator: string;
+            /** Gating */
+            gating: boolean;
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Note */
+            note?: string | null;
+            /** Status */
+            status: string;
+            /** Threshold */
+            threshold?: number | null;
+            /** Unit */
+            unit: string;
+            /** Value */
+            value?: number | null;
+        };
+        /** GroupWeight */
+        GroupWeight: {
+            /** After */
+            after?: number | null;
+            /** Drift */
+            drift: number;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Now */
+            now: number;
+            /** Target */
+            target: number;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -600,6 +861,21 @@ export interface components {
             share: number;
             /** Start */
             start: string;
+        };
+        /** LadderLevel */
+        LadderLevel: {
+            /** Drawdown */
+            drawdown: number;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /** Risk Multiplier */
+            risk_multiplier: number;
+            /** Room */
+            room?: number | null;
+            /** Threshold Equity */
+            threshold_equity?: number | null;
         };
         /** LatestMLResult */
         LatestMLResult: {
@@ -647,6 +923,7 @@ export interface components {
         LatestTechnicalResult: {
             /** Age Hours */
             age_hours: number;
+            funnel?: components["schemas"]["Funnel"] | null;
             /** Generated At */
             generated_at: string;
             /** Kind */
@@ -655,6 +932,21 @@ export interface components {
             payload: components["schemas"]["TechnicalCandidate"][];
             /** Stale */
             stale: boolean;
+        };
+        /** LimitUse */
+        LimitUse: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Maximum */
+            maximum: number;
+            /** Note */
+            note?: string | null;
+            /** Unit */
+            unit: string;
+            /** Used */
+            used?: number | null;
         };
         /** MLPredictResponse */
         MLPredictResponse: {
@@ -720,6 +1012,21 @@ export interface components {
             /** Signal */
             signal: string;
         };
+        /** NightlyRef */
+        NightlyRef: {
+            /** Bh Adjusted P */
+            bh_adjusted_p?: number | null;
+            /** Generated At */
+            generated_at?: string | null;
+            /** In Last Scan */
+            in_last_scan: boolean;
+            /** Label */
+            label: string;
+            /** Tested */
+            tested?: number | null;
+            /** Validation Status */
+            validation_status?: string | null;
+        };
         /** OhlcvBar */
         OhlcvBar: {
             /** Close */
@@ -743,6 +1050,44 @@ export interface components {
             data: components["schemas"]["OhlcvBar"][];
             /** Symbol */
             symbol: string;
+        };
+        /** OverviewResponse */
+        OverviewResponse: {
+            /** Accounts */
+            accounts: components["schemas"]["AccountValue"][];
+            /** Allocation */
+            allocation: components["schemas"]["GroupWeight"][];
+            /** Allocation Basis */
+            allocation_basis: string;
+            /** As Of */
+            as_of: string;
+            /** Benchmark Label */
+            benchmark_label: string;
+            /** Benchmark Return */
+            benchmark_return?: number | null;
+            /** Cash */
+            cash: number;
+            /** Day Change */
+            day_change?: number | null;
+            /** Day Change Pct */
+            day_change_pct?: number | null;
+            /** Max Drawdown */
+            max_drawdown?: number | null;
+            /** Method */
+            method: string;
+            paper_sleeve: components["schemas"]["PaperSleeve"];
+            /** Period Return */
+            period_return?: number | null;
+            /** Range */
+            range: string;
+            /** Series */
+            series: components["schemas"]["SeriesPoint"][];
+            /** Total Value */
+            total_value: number;
+            /** Unpriced */
+            unpriced?: string[];
+            /** Warnings */
+            warnings?: string[];
         };
         /** PairAnalysisResponse */
         PairAnalysisResponse: {
@@ -826,6 +1171,30 @@ export interface components {
                 [key: string]: unknown;
             }[];
         };
+        /**
+         * PaperSleeve
+         * @description The platform's own paper signal sleeve: NOT real money and not part of the portfolio total.
+         */
+        PaperSleeve: {
+            /** As Of */
+            as_of?: string | null;
+            /** Drawdown */
+            drawdown?: number | null;
+            /**
+             * Label
+             * @default paper
+             */
+            label?: string;
+            /**
+             * Note
+             * @default
+             */
+            note?: string;
+            /** Peak */
+            peak?: number | null;
+            /** Value */
+            value?: number | null;
+        };
         /** PatternDetectResponse */
         PatternDetectResponse: {
             /** Buys */
@@ -875,6 +1244,97 @@ export interface components {
             /** Price */
             price: number;
         };
+        /** ProposalResponse */
+        ProposalResponse: {
+            /** Advisory */
+            advisory: string;
+            /** As Of */
+            as_of: string;
+            /** Cash */
+            cash: number;
+            /** Cash After */
+            cash_after: number;
+            /** Contribution */
+            contribution: number;
+            /** Groups */
+            groups: components["schemas"]["GroupWeight"][];
+            /** Groups Basis */
+            groups_basis: string;
+            /** Notes */
+            notes?: string[];
+            /** Rows */
+            rows: components["schemas"]["ProposalRow"][];
+            /** Signal Month */
+            signal_month?: string | null;
+            /** Total Value */
+            total_value: number;
+            /** Trades */
+            trades: components["schemas"]["ProposalTrade"][];
+            /** Trend */
+            trend: components["schemas"]["TrendAsset"][];
+            /** Unmanaged */
+            unmanaged?: string[];
+        };
+        /** ProposalRow */
+        ProposalRow: {
+            /** Action */
+            action: string;
+            /** Band */
+            band: number;
+            /** Current */
+            current: number;
+            /** Drift */
+            drift: number;
+            /** Group */
+            group: string;
+            /** Name */
+            name: string;
+            /** Outside */
+            outside: boolean;
+            /** Price */
+            price: number;
+            /** Shares */
+            shares: number;
+            /** Symbol */
+            symbol: string;
+            /** Target */
+            target: number;
+            /** Trade Shares */
+            trade_shares: number;
+            /** Trade Value */
+            trade_value: number;
+            /** Value */
+            value: number;
+        };
+        /** ProposalTrade */
+        ProposalTrade: {
+            /** Action */
+            action: string;
+            /** Amount */
+            amount: number;
+            /** Shares */
+            shares: number;
+            /** Symbol */
+            symbol: string;
+        };
+        /** ReasonCount */
+        ReasonCount: {
+            /** Count */
+            count: number;
+            /** Reason */
+            reason: string;
+        };
+        /** ReconcileStatus */
+        ReconcileStatus: {
+            /** Broker Checked */
+            broker_checked: boolean;
+            /** Mismatches */
+            mismatches: string[];
+            /** Note */
+            note: string;
+            /** Status */
+            status: string;
+        };
         /** RegimeRequest */
         RegimeRequest: {
             /**
@@ -884,6 +1344,50 @@ export interface components {
             period_days?: number;
             /** Symbol */
             symbol: string;
+        };
+        /** RiskStatusResponse */
+        RiskStatusResponse: {
+            /** Configured Equity */
+            configured_equity: number;
+            /** Decision Reasons */
+            decision_reasons: components["schemas"]["ReasonCount"][];
+            /** Decision Total */
+            decision_total: number;
+            /** Decision Window Days */
+            decision_window_days: number;
+            /** Decisions */
+            decisions: components["schemas"]["DecisionRow"][];
+            /** Drawdown */
+            drawdown?: number | null;
+            /** Equity History */
+            equity_history: components["schemas"]["EquityHistoryPoint"][];
+            /** Halt Reason */
+            halt_reason?: string | null;
+            /** Halted */
+            halted: boolean;
+            /** Halted At */
+            halted_at?: string | null;
+            /** Kill Switch */
+            kill_switch: boolean;
+            /** Ladder */
+            ladder: components["schemas"]["LadderLevel"][];
+            /** Limits */
+            limits: components["schemas"]["LimitUse"][];
+            /** Max Positions */
+            max_positions: number;
+            /** Mode */
+            mode: string;
+            /** Open Positions */
+            open_positions?: number | null;
+            /** Paper Trade Enabled */
+            paper_trade_enabled: boolean;
+            /** Peak */
+            peak?: number | null;
+            reconcile: components["schemas"]["ReconcileStatus"];
+            /** Sleeve As Of */
+            sleeve_as_of?: string | null;
+            /** Sleeve Value */
+            sleeve_value?: number | null;
         };
         /** ScanFailure */
         ScanFailure: {
@@ -948,6 +1452,17 @@ export interface components {
             validation_status?: string;
             /** Win Rate */
             win_rate?: number | null;
+        };
+        /** SeriesPoint */
+        SeriesPoint: {
+            /** Benchmark */
+            benchmark?: number | null;
+            /** Date */
+            date: string;
+            /** Drawdown */
+            drawdown?: number | null;
+            /** Portfolio */
+            portfolio: number;
         };
         /**
          * StoreSymbolStatus
@@ -1085,6 +1600,26 @@ export interface components {
             /** Win Rate */
             win_rate?: number | null;
         };
+        /** TradeMarker */
+        TradeMarker: {
+            /** Entry Date */
+            entry_date: string;
+            /** Entry Price */
+            entry_price: number;
+            /** Exit Date */
+            exit_date?: string | null;
+            /** Exit Price */
+            exit_price?: number | null;
+            /** Exit Reason */
+            exit_reason?: string | null;
+            /**
+             * In Holdout
+             * @default false
+             */
+            in_holdout?: boolean;
+            /** Pnl Pct */
+            pnl_pct?: number | null;
+        };
         /** TradeOut */
         TradeOut: {
             /** Bars Held */
@@ -1108,6 +1643,46 @@ export interface components {
             in_holdout?: boolean;
             /** Pnl Pct */
             pnl_pct?: number | null;
+        };
+        /** TrendAsset */
+        TrendAsset: {
+            /**
+             * Data Available
+             * @default true
+             */
+            data_available?: boolean;
+            /** Months */
+            months: components["schemas"]["TrendMonth"][];
+            /** Name */
+            name: string;
+            /** Score */
+            score: number;
+            /** State */
+            state: string;
+            /** Symbol */
+            symbol: string;
+            /** Votes */
+            votes: components["schemas"]["TrendVote"][];
+            /** Weight */
+            weight: number;
+        };
+        /** TrendMonth */
+        TrendMonth: {
+            /** Average */
+            average?: number | null;
+            /** Close */
+            close: number;
+            /** Month */
+            month: string;
+        };
+        /** TrendVote */
+        TrendVote: {
+            /** Above */
+            above: boolean;
+            /** Average */
+            average?: number | null;
+            /** Lookback */
+            lookback: number;
         };
         /** ValidationError */
         ValidationError: {
@@ -1181,6 +1756,83 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    get_proposal_api_allocation_proposal_get: {
+        parameters: {
+            query?: {
+                /** @description dollars to add on top of cash */
+                contribution?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalResponse"];
+                };
+            };
+            /** @description unauthorized (API_TOKEN set, token missing or wrong) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description unknown_symbol / no_data / not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description validation_error / unknown_pattern / insufficient_data */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description busy: another heavy request is running */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description internal_error / contract_violation */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description data_quality */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     run_backtest_api_backtest_run_post: {
         parameters: {
             query?: never;
@@ -2197,6 +2849,82 @@ export interface operations {
             };
         };
     };
+    get_overview_api_portfolio_overview_get: {
+        parameters: {
+            query?: {
+                range?: "1M" | "3M" | "YTD" | "1Y" | "ALL";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OverviewResponse"];
+                };
+            };
+            /** @description unauthorized (API_TOKEN set, token missing or wrong) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description unknown_symbol / no_data / not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description validation_error / unknown_pattern / insufficient_data */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description busy: another heavy request is running */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description internal_error / contract_violation */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description data_quality */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     latest_ml_api_results_ml_latest_get: {
         parameters: {
             query?: never;
@@ -2365,6 +3093,157 @@ export interface operations {
             };
             /** @description validation_error / unknown_pattern / insufficient_data */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description internal_error / contract_violation */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description data_quality */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    get_risk_status_api_risk_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RiskStatusResponse"];
+                };
+            };
+            /** @description unauthorized (API_TOKEN set, token missing or wrong) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description unknown_symbol / no_data / not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description validation_error / unknown_pattern / insufficient_data */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description internal_error / contract_violation */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description data_quality */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description state_not_initialized */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    get_candidate_api_scanner_candidate_get: {
+        parameters: {
+            query: {
+                symbol: string;
+                pattern: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CandidateResponse"];
+                };
+            };
+            /** @description unauthorized (API_TOKEN set, token missing or wrong) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description unknown_symbol / no_data / not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description validation_error / unknown_pattern / insufficient_data */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description busy: another heavy request is running */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -1,19 +1,25 @@
+import { useState } from 'react';
 import { BrowserRouter, Routes, Route, NavLink, useLocation } from 'react-router-dom';
 import ErrorBoundary from './components/ErrorBoundary';
-import Dashboard from './pages/Dashboard';
+import { HeaderSlotContext } from './components/ui/headerSlot';
+import Overview from './pages/Overview';
 import TechnicalScanner from './pages/TechnicalScanner';
 import PairsTrading from './pages/PairsTrading';
 import MLSignals from './pages/MLSignals';
 import StressTestLab from './pages/StressTestLab';
+import Allocation from './pages/Allocation';
+import Risk from './pages/Risk';
 import Settings from './pages/Settings';
 
 const navItems = [
-  { to: '/', label: 'Dashboard', icon: '📊' },
-  { to: '/scanner', label: 'Technical Scanner', icon: '🔧' },
-  { to: '/pairs', label: 'Pairs Trading', icon: '📈' },
-  { to: '/ml', label: 'ML Signals', icon: '🤖' },
-  { to: '/stress', label: 'Stress Test Lab', icon: '🔬' },
-  { to: '/settings', label: 'Settings', icon: '⚙️' },
+  { to: '/', label: 'Overview' },
+  { to: '/scanner', label: 'Scanner' },
+  { to: '/pairs', label: 'Pairs' },
+  { to: '/ml', label: 'ML' },
+  { to: '/stress', label: 'Stress' },
+  { to: '/allocation', label: 'Allocation' },
+  { to: '/risk', label: 'Risk & orders' },
+  { to: '/settings', label: 'Settings' },
 ];
 
 function RoutedPages() {
@@ -21,11 +27,13 @@ function RoutedPages() {
   return (
     <ErrorBoundary resetKey={pathname}>
       <Routes>
-        <Route path="/" element={<Dashboard />} />
+        <Route path="/" element={<Overview />} />
         <Route path="/scanner" element={<TechnicalScanner />} />
         <Route path="/pairs" element={<PairsTrading />} />
         <Route path="/ml" element={<MLSignals />} />
         <Route path="/stress" element={<StressTestLab />} />
+        <Route path="/allocation" element={<Allocation />} />
+        <Route path="/risk" element={<Risk />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
     </ErrorBoundary>
@@ -33,45 +41,40 @@ function RoutedPages() {
 }
 
 export default function App() {
+  // The 40px header bar is a portal target: each page's <PageHeader> renders into it.
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
   return (
     <BrowserRouter>
-      <div className="flex h-screen">
-        {/* Sidebar */}
-        <nav className="w-56 flex-shrink-0 flex flex-col p-4 border-r"
-          style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
-          <h1 className="text-xl font-bold mb-6" style={{ color: 'var(--accent-blue)' }}>
-            🤖 Trading Bot v2
-          </h1>
-          <div className="flex flex-col gap-1">
-            {navItems.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.to === '/'}
-                className={({ isActive }) =>
-                  `flex items-center gap-2 px-3 py-2 rounded text-sm transition-colors ${
-                    isActive ? 'font-semibold' : 'opacity-70 hover:opacity-100'
-                  }`
-                }
-                style={({ isActive }) => ({
-                  background: isActive ? 'var(--bg-tertiary)' : 'transparent',
-                  color: 'var(--text-primary)',
-                })}
-              >
-                <span>{item.icon}</span>
-                <span>{item.label}</span>
-              </NavLink>
-            ))}
-          </div>
-          <div className="mt-auto pt-4 text-xs" style={{ color: 'var(--text-secondary)' }}>
-            ⚠️ Not financial advice.<br />Past performance ≠ future results.
+      <div style={{ display: 'flex', flexWrap: 'wrap', minHeight: '100vh', background: 'var(--bg)' }}>
+        <nav
+          className="side" aria-label="Main"
+          style={{ flex: '0 0 200px', padding: '12px 0', borderRight: '1px solid var(--border)', background: 'var(--sidebar)' }}
+        >
+          <div style={{ padding: '4px 12px 14px', fontWeight: 600 }}>Trading platform</div>
+          {navItems.map((item) => (
+            <NavLink key={item.to} to={item.to} end={item.to === '/'} className={({ isActive }) => (isActive ? 'on' : undefined)}>
+              {item.label}
+            </NavLink>
+          ))}
+          <div className="side-foot" style={{ padding: '16px 12px 0', color: 'var(--text-3)', fontSize: 12 }}>
+            Paper trading only. Not financial advice.
           </div>
         </nav>
 
-        {/* Main content */}
-        <main className="flex-1 overflow-auto p-6" style={{ background: 'var(--bg-primary)' }}>
-          <RoutedPages />
-        </main>
+        <div style={{ flex: '999 1 560px', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+          <header
+            ref={setSlot}
+            style={{
+              display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px 16px', minHeight: 40,
+              padding: '0 16px', borderBottom: '1px solid var(--border)', background: 'var(--panel)',
+            }}
+          />
+          <main style={{ padding: 16, maxWidth: 1240, width: '100%' }}>
+            <HeaderSlotContext.Provider value={slot}>
+              <RoutedPages />
+            </HeaderSlotContext.Provider>
+          </main>
+        </div>
       </div>
     </BrowserRouter>
   );

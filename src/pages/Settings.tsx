@@ -1,20 +1,29 @@
+import PageHeader from '../components/ui/PageHeader';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorPanel from '../components/ErrorPanel';
 import { useConfig } from '../api/hooks';
+import { pct, usd } from '../lib/format';
+
+/** Fractions stored as *_pct are shown as percentages. */
+function display(key: string, value: unknown): string {
+  if (typeof value === 'number' && (key.endsWith('_pct') || key.endsWith('_rate'))) return pct(value, 2);
+  if (typeof value === 'number' && key.includes('capital')) return usd(value, 0);
+  return typeof value === 'object' ? JSON.stringify(value) : String(value);
+}
 
 function Section({ title, data }: { title: string; data: Record<string, unknown> | undefined }) {
   const entries = Object.entries(data ?? {});
   return (
-    <div className="rounded-lg mb-4 p-4" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
+    <div className="panel mb-4">
       <h3 className="font-semibold mb-3">{title}</h3>
       {entries.length === 0 ? (
-        <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>No settings.</p>
+        <p className="text-sm" style={{ color: 'var(--text-2)' }}>No settings.</p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
           {entries.map(([key, value]) => (
-            <div key={key} className="flex justify-between text-sm py-1 border-b" style={{ borderColor: 'var(--border)' }}>
-              <span style={{ color: 'var(--text-secondary)' }}>{key.replace(/_/g, ' ')}</span>
-              <span className="font-mono">{typeof value === 'object' ? JSON.stringify(value) : String(value)}</span>
+            <div key={key} className="flex justify-between gap-4 text-sm py-1 border-b" style={{ borderColor: 'var(--border)' }}>
+              <span style={{ color: 'var(--text-2)' }}>{key.replace(/_/g, ' ')}</span>
+              <span className="font-mono" style={{ textAlign: 'left', overflowWrap: 'anywhere' }}>{display(key, value)}</span>
             </div>
           ))}
         </div>
@@ -31,7 +40,7 @@ export default function Settings() {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-6">Settings</h2>
+      <PageHeader title="Settings" />
       {error && <ErrorPanel error={error} onRetry={retry} />}
       {config && (
         <>

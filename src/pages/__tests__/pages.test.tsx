@@ -23,7 +23,7 @@ describe('smoke', () => {
 
   it('TechnicalScanner renders and analyzes', async () => {
     render(<TechnicalScanner />)
-    expect(screen.getByRole('heading', { name: 'Technical Scanner' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Scanner' })).toBeInTheDocument()
     await screen.findByRole('option', { name: 'golden_cross' })
     await userEvent.click(screen.getByRole('button', { name: 'Analyze' }))
     await waitFor(() => expect(screen.getAllByTestId('plot').length).toBeGreaterThan(0))

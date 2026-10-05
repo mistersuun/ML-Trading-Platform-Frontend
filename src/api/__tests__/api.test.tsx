@@ -31,38 +31,30 @@ describe('query cache', () => {
       return HttpResponse.json({ patterns: ['golden_cross'], count: 1 })
     }))
     renderWithClient(<App />) // App brings its own BrowserRouter; navigate through the sidebar
-    await userEvent.click(screen.getByRole('link', { name: /technical scanner/i }))
+    await userEvent.click(screen.getByRole('link', { name: /^scanner$/i }))
     await screen.findByRole('option', { name: 'golden_cross' })
     await userEvent.click(screen.getByRole('link', { name: /settings/i }))
     await screen.findByText('initial capital')
-    await userEvent.click(screen.getByRole('link', { name: /technical scanner/i }))
+    await userEvent.click(screen.getByRole('link', { name: /^scanner$/i }))
     await screen.findByRole('option', { name: 'golden_cross' })
     expect(n.v).toBe(1)
   })
 })
 
 describe('in-flight requests', () => {
-  it('double-clicking Analyze sends each request once', async () => {
-    const n = { ohlcv: 0, detect: 0, backtest: 0 }
+  it('double-clicking Analyze sends the candidate request once', async () => {
+    const n = { candidate: 0 }
     server.use(
-      http.get('*/api/data/:symbol', async ({ params }) => {
-        n.ohlcv++; await delay(50)
-        return HttpResponse.json({ symbol: params.symbol, count: 0, data: [] })
-      }),
-      http.post('*/api/patterns/detect', async () => {
-        n.detect++; await delay(50)
-        return HttpResponse.json({ symbol: 'AAPL', pattern: 'golden_cross', total_signals: 0, buys: [], sells: [] })
-      }),
-      http.post('*/api/backtest/run', async () => {
-        n.backtest++; await delay(50)
-        return HttpResponse.json({ symbol: 'AAPL', pattern: 'golden_cross', metrics: {}, equity_curve: [], trades: [] })
+      http.get('*/api/scanner/candidate', async () => {
+        n.candidate++; await delay(50)
+        return HttpResponse.json({ error: { code: 'no_data', message: 'No price data returned for QQQ' } }, { status: 404 })
       }),
     )
     renderWithClient(<TechnicalScanner />)
     await screen.findByRole('option', { name: 'golden_cross' })
     await userEvent.dblClick(screen.getByRole('button', { name: 'Analyze' }))
     await screen.findByText(/No price data returned/)
-    expect(n).toEqual({ ohlcv: 1, detect: 1, backtest: 1 })
+    expect(n).toEqual({ candidate: 1 })
   })
 
   it('double-clicking Run scan now sends one request', async () => {

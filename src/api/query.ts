@@ -11,6 +11,7 @@ export const MINUTE = 60_000;
 export function shouldRetry(failureCount: number, error: unknown): boolean {
   if (failureCount >= 2) return false;
   if (error instanceof ApiError && error.status !== 0 && error.status < 500) return false;
+  if (error instanceof ApiError && error.code === 'state_not_initialized') return false;   // deterministic
   return true;
 }
 

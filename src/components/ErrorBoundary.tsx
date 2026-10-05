@@ -28,12 +28,11 @@ export default class ErrorBoundary extends Component<Props, State> {
     if (this.state.error) {
       return (
         <div role="alert" className="rounded-lg p-4"
-          style={{ background: 'var(--bg-secondary)', border: '1px solid var(--accent-red)' }}>
-          <h2 className="text-lg font-bold mb-2" style={{ color: 'var(--accent-red)' }}>This page crashed</h2>
+          style={{ background: 'var(--panel)', border: '1px solid var(--down)' }}>
+          <h2 className="text-lg font-bold mb-2" style={{ color: 'var(--down)' }}>This page crashed</h2>
           <p className="text-sm mb-3">{this.state.error.message}</p>
           <button onClick={() => this.setState({ error: null })}
-            className="px-4 py-1 rounded font-semibold text-black text-sm"
-            style={{ background: 'var(--accent-blue)' }}>
+            className="btn btn-primary">
             Try again
           </button>
         </div>

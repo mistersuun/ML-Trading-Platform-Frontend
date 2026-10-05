@@ -24,11 +24,10 @@ describe('ErrorBoundary', () => {
 
   it('keeps the sidebar working when a page throws', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    // malformed payload makes the Dashboard table throw while rendering
-    server.use(http.post('*/api/patterns/scan', () =>
-      HttpResponse.json({ signals: [null] })))
+    // a malformed payload makes the Pairs page throw while rendering
+    server.use(http.get('*/api/pairs/configured', () => HttpResponse.json({ pairs: [null] })))
+    window.history.pushState({}, '', '/pairs')
     render(<App />)
-    await userEvent.click(screen.getByRole('button', { name: /run scan now/i }))
     expect(await screen.findByText(/this page crashed/i)).toBeInTheDocument()
     // sidebar navigation still works
     await userEvent.click(screen.getByRole('link', { name: /settings/i }))

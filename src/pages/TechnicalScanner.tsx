@@ -1,199 +1,302 @@
-import { useState } from 'react';
-import Plot from 'react-plotly.js';
-import { useAnalysis, usePatterns } from '../api/hooks';
-import type { Metrics } from '../api/types';
-import MetricCard from '../components/MetricCard';
-import LoadingSpinner from '../components/LoadingSpinner';
+import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import Plot from '../lib/Plot';
+import { useQuery } from '@tanstack/react-query';
+import { getApi, isAbortError, toApiError } from '../api/client';
+import { usePatterns } from '../api/hooks';
+import { MINUTE } from '../api/query';
+import type { components } from '../api/schema';
 import ErrorPanel from '../components/ErrorPanel';
-import { num, pct, signColor } from '../lib/format';
+import { BulletBar, Histogram, LineChart } from '../components/charts';
+import { Panel, PageHeader, EmptyState, Status, toneColor, type Tone } from '../components/ui';
+import { candleStyle, markerDown, markerUp, plotlyConfig, plotlyLayout } from '../lib/plotlyTheme';
+import { T } from '../lib/tokens';
+import { int, isNum, NA, shortDate, signedPct, signedUsd, usd, xTickCount } from '../lib/format';
+import { evenIndices } from '../components/charts/scale';
+import {
+  gateKind, gateResult, gateTrack, gatesTitle, gatingStats, lastTradesTitle, longDate, mergeCurves, oosTitle, winLossTitle,
+} from './scannerLogic';
+
+type Candidate = components['schemas']['CandidateResponse'];
+
+/** GET /api/scanner/candidate. Heavy endpoint: 429 "busy" surfaces as an ApiError. */
+async function fetchCandidate(symbol: string, pattern: string, signal?: AbortSignal): Promise<Candidate> {
+  try {
+    const { data } = await getApi().GET('/api/scanner/candidate', { params: { query: { symbol, pattern } }, signal });
+    return data as Candidate;
+  } catch (e) {
+    if (isAbortError(e)) throw e;
+    throw toApiError(e);
+  }
+}
+
+// ---------- panels ----------
+
+const sub = { color: 'var(--text-2)', fontSize: 12 } as const;
+
+function Loading({ height = 120 }: { height?: number }) {
+  return <EmptyState height={height}>Loading…</EmptyState>;
+}
+
+function Hero({ c }: { c: Candidate }) {
+  const [now] = useState(() => Date.now());
+  const { total, failed } = gatingStats(c.gates);
+  const dayTone: Tone = !isNum(c.day_change) ? 'neutral' : c.day_change >= 0 ? 'up' : 'down';
+  const oosTone: Tone = !isNum(c.oos_return) ? 'neutral' : c.oos_return >= 0 ? 'up' : 'down';
+  const validated = c.verdict === 'validated';
+  const since = c.oos_curve[0]?.date.slice(0, 4);
+  const luck = failed > 0 && c.nightly.tested && isNum(c.oos_return) && c.oos_return > 0
+    ? ` It may still be luck: of ${int(c.nightly.tested)} ideas tested ${c.nightly.generated_at && now - Date.parse(c.nightly.generated_at) < 864e5 ? 'tonight' : 'in the latest scan'}, a result this good is expected by chance.`
+    : '';
+  return (
+    <Panel style={{ display: 'flex', flexWrap: 'wrap', gap: '12px 40px', alignItems: 'flex-end' }}>
+      <div>
+        <div style={sub}>{c.symbol} · {c.pattern}</div>
+        <div style={{ fontSize: 36, fontWeight: 600, lineHeight: 1.1 }}>{usd(c.last_price)}</div>
+        <div>
+          {isNum(c.day_change) ? (
+            <span style={{ color: toneColor(dayTone) }}>
+              <span aria-hidden="true">{c.day_change >= 0 ? '▲ ' : '▼ '}</span>
+              {signedUsd(c.day_change)} ({signedPct(c.day_change_pct, 2)})
+            </span>
+          ) : <span style={sub}>{NA}</span>}
+          <span style={sub}> today{c.as_of ? ` · as of ${longDate(c.as_of)}` : ''}</span>
+        </div>
+      </div>
+      <div>
+        <div style={sub}>{since ? `If traded since ${since} (out of sample)` : 'If traded (out of sample)'}</div>
+        <div data-testid="oos-return" style={{ fontSize: 20, color: toneColor(oosTone) }}>{signedPct(c.oos_return)}</div>
+      </div>
+      <div>
+        <div style={sub}>Same rule, fit on the past (ignored)</div>
+        <div data-testid="is-return" style={{ fontSize: 20, color: 'var(--text-3)' }}>{signedPct(c.in_sample_return)}</div>
+      </div>
+      <div>
+        <div style={sub}>Verdict</div>
+        <div style={{ fontSize: 20 }}>
+          {validated ? <Status kind="pass">Validated</Status> : <Status kind="warn">Alert only</Status>}
+        </div>
+      </div>
+      <div style={{ flex: '1 1 200px', color: 'var(--text-2)', fontSize: 12, maxWidth: 320 }}>
+        {validated
+          ? `All ${total} checks pass. The idea is eligible for paper orders.`
+          : `${failed} of ${total} checks fail.${luck}`}
+      </div>
+    </Panel>
+  );
+}
+
+function PriceChart({ c }: { c: Candidate }) {
+  const bars = c.bars;
+  const data = useMemo(() => {
+    if (bars.length === 0) return [];
+    const first = bars[0].date;
+    const entries = c.trades.filter((t) => t.entry_date >= first);
+    const exits = c.trades.filter((t) => t.exit_date != null && isNum(t.exit_price) && (t.exit_date as string) >= first);
+    return [
+      {
+        type: 'candlestick', x: bars.map((b) => b.date), open: bars.map((b) => b.open), high: bars.map((b) => b.high),
+        low: bars.map((b) => b.low), close: bars.map((b) => b.close), ...candleStyle, name: c.symbol,
+      },
+      ...(entries.length ? [{
+        type: 'scatter', mode: 'markers', name: 'Buy at next open', x: entries.map((t) => t.entry_date),
+        y: entries.map((t) => t.entry_price), marker: { ...markerUp, color: T.accent },
+      }] : []),
+      ...(exits.length ? [{
+        type: 'scatter', mode: 'markers', name: 'Exit', x: exits.map((t) => t.exit_date),
+        y: exits.map((t) => t.exit_price), marker: { ...markerDown, color: T.text1 },
+      }] : []),
+    ];
+  }, [bars, c.trades, c.symbol]);
+
+  const layout = useMemo(() => {
+    const last = bars.length ? bars[bars.length - 1].date : null;
+    const first = bars.length ? bars[0].date : null;
+    const showHold = last !== null && first !== null && c.holdout_start <= last;
+    const x0 = showHold && c.holdout_start < (first as string) ? (first as string) : c.holdout_start;
+    return plotlyLayout({
+      height: 280, margin: { t: 8 },
+      extra: {
+        hovermode: 'x unified',
+        ...(showHold ? {
+          shapes: [{ type: 'rect', xref: 'x', yref: 'paper', x0, x1: last, y0: 0, y1: 1, fillcolor: '#16161C', line: { width: 0 }, layer: 'below' }],
+          annotations: [{ xref: 'x', yref: 'paper', x: x0, y: 1, xanchor: 'left', yanchor: 'top', showarrow: false,
+            text: `Hold-out from ${longDate(c.holdout_start)}`, font: { color: T.text2, size: 12 } }],
+        } : {}),
+      },
+    });
+  }, [bars, c.holdout_start]);
+
+  return (
+    <Panel
+      title={lastTradesTitle(c.trades)}
+      aside="▲ buy at next open · ▼ exit · shaded = hold-out period"
+    >
+      {bars.length === 0
+        ? <EmptyState height={280}>No price bars to chart.</EmptyState>
+        : <Plot data={data as never} layout={layout as never} config={plotlyConfig(true) as never} useResizeHandler style={{ width: '100%' }} />}
+    </Panel>
+  );
+}
+
+function OosPanel({ c }: { c: Candidate }) {
+  const merged = useMemo(() => mergeCurves(c.oos_curve, c.in_sample_curve), [c.oos_curve, c.in_sample_curve]);
+  const hasOos = c.oos_curve.length > 1;
+  const n = merged.x.length;
+  const xTicks = useMemo(() => {
+    if (n === 0) return [];
+    return evenIndices(n, xTickCount()).map((index) => ({ index, label: shortDate(merged.x[index], true) }));
+  }, [merged.x, n]);
+  const series = useMemo(() => [
+    { name: 'Out of sample (real test)', values: merged.a, color: '#3987E5' },
+    { name: 'Fitted on the past (ignored)', values: merged.b, color: T.text3, dashed: true },
+  ], [merged]);
+  return (
+    <Panel flex="2 1 520px" title={oosTitle(c.oos_return, c.in_sample_return)} subtitle={c.in_sample_method}>
+      {hasOos
+        ? <LineChart x={merged.x} series={series} ariaLabel="Cumulative return, out of sample versus fitted on the past"
+            height={200} yFormat={(v) => signedPct(v, 0)} endFormat={(v) => signedPct(v, 1)} baseline={0} xTicks={xTicks} />
+        : <EmptyState height={200}>Not enough out-of-sample history to draw the curve.</EmptyState>}
+    </Panel>
+  );
+}
+
+function TradesPanel({ c }: { c: Candidate }) {
+  const ci = isNum(c.win_rate_ci_low) && isNum(c.win_rate_ci_high)
+    ? ` (${Math.round(c.win_rate_ci_low * 100)}–${Math.round(c.win_rate_ci_high * 100)})` : '';
+  return (
+    <Panel flex="1 1 320px" title={winLossTitle(c.avg_win, c.avg_loss)}
+      subtitle={`${int(c.n_oos_trades)} out-of-sample trades, return per trade`}>
+      <Histogram values={c.oos_trade_returns} binCount={12} ariaLabel="Distribution of return per out-of-sample trade"
+        format={(v) => signedPct(v, 1)} noun="trades" />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, marginTop: 12 }}>
+        <div><div style={sub}>Win rate</div><div>{isNum(c.win_rate) ? `${Math.round(c.win_rate * 100)}%` : NA}<span style={sub}>{ci}</span></div></div>
+        <div><div style={sub}>Avg win</div><div style={{ color: 'var(--up)' }}>{signedPct(c.avg_win)}</div></div>
+        <div><div style={sub}>Avg loss</div><div style={{ color: 'var(--down)' }}>{signedPct(c.avg_loss)}</div></div>
+      </div>
+    </Panel>
+  );
+}
+
+function GatesPanel({ c }: { c: Candidate }) {
+  const scale = useMemo(() => {
+    const vals = c.gates.filter((g) => g.unit === 'fraction' && isNum(g.value)).map((g) => Math.abs(g.value as number));
+    return Math.max(0.1, ...vals.map((v) => v * 1.25));
+  }, [c.gates]);
+  return (
+    <Panel title={gatesTitle(c.gates)}
+      subtitle="All must pass before the platform may place an order · the line marks the threshold">
+      {c.gates.length === 0 ? <EmptyState>No checks were returned.</EmptyState> : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {c.gates.map((g) => {
+            const tr = gateTrack(g, scale);
+            const kind = gateKind(g);
+            const result = gateResult(g);
+            return (
+              <div key={g.key} data-testid={`gate-${g.key}`}
+                className="gate-row">
+                <span>
+                  {g.name}
+                  {g.note && <span style={{ ...sub, display: 'block' }}>{g.note}</span>}
+                </span>
+                <BulletBar value={tr.value} max={tr.max} height={14} status={kind}
+                  marks={[{ at: tr.mark, color: T.text1 }]} ariaLabel={`${g.name}: ${result}`} />
+                <Status kind={kind}>{g.status === 'unavailable' ? 'Unavailable' : result}</Status>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+// ---------- page ----------
 
 export default function TechnicalScanner() {
   const { data: patternsData, error: patError, isPending: patLoading, refetch: refetchPatterns } = usePatterns();
-  const retryPatterns = () => void refetchPatterns();
   const patterns = patternsData?.patterns ?? [];
-  const [symbol, setSymbol] = useState('AAPL');
+  const [symbol, setSymbol] = useState('QQQ');
   const [chosenPattern, setChosenPattern] = useState('');
   const pattern = chosenPattern || patterns[0] || '';
   const [target, setTarget] = useState<{ symbol: string; pattern: string } | null>(null);
-  const { ohlcv: ohlcvData, signals, backtest, loading, done, error, retry } = useAnalysis(target);
-  const ohlcv = ohlcvData?.data ?? [];
-  const result = done;
 
-  const handleAnalyze = () => {
-    if (!symbol || !pattern) return;
-    setTarget({ symbol, pattern });
+  const q = useQuery({
+    queryKey: ['scanner', 'candidate', target?.symbol ?? '', target?.pattern ?? ''],
+    queryFn: ({ signal }) => fetchCandidate(target!.symbol, target!.pattern, signal),
+    enabled: target !== null,
+    staleTime: 5 * MINUTE,
+  });
+  const c = q.data;
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    const s = symbol.trim();
+    if (!s || !pattern) return;
+    setTarget({ symbol: s, pattern });
   };
 
-  const m = (backtest?.metrics ?? null) as Metrics | null;
+  const loading = target !== null && q.isPending && !q.error;
+  const meta: ReactNode = c ? `Daily · next-open fills · ${c.variant}` : 'Daily · next-open fills';
+
+  const controls = (
+    <form onSubmit={submit} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+      <label htmlFor="scan-symbol" style={{ color: 'var(--text-2)' }}>Symbol</label>
+      <input id="scan-symbol" className="field" value={symbol} style={{ width: 80 }}
+        onChange={(e) => setSymbol(e.target.value.toUpperCase())} />
+      <label htmlFor="scan-pattern" style={{ color: 'var(--text-2)' }}>Pattern</label>
+      <select id="scan-pattern" className="field" value={pattern} onChange={(e) => setChosenPattern(e.target.value)}>
+        {patterns.map((p) => <option key={p} value={p}>{p}</option>)}
+      </select>
+      <button type="submit" className="btn btn-primary" disabled={loading || !pattern}>
+        {loading ? 'Analyzing…' : 'Analyze'}
+      </button>
+    </form>
+  );
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-6">Technical Scanner</h2>
+      <PageHeader title="Scanner" meta={meta} actions={controls} />
+      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 1240 }}>
+        {patError && <ErrorPanel error={patError} onRetry={() => void refetchPatterns()} />}
+        {patLoading && <EmptyState height={40}>Loading patterns…</EmptyState>}
 
-      {/* Controls */}
-      <div className="flex gap-3 mb-6 flex-wrap">
-        <input
-          value={symbol}
-          onChange={(e) => setSymbol(e.target.value.toUpperCase())}
-          placeholder="Symbol (e.g. AAPL)"
-          className="px-3 py-2 rounded text-sm w-40"
-          style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
-        />
-        <select
-          value={pattern}
-          onChange={(e) => setChosenPattern(e.target.value)}
-          className="px-3 py-2 rounded text-sm"
-          style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
-        >
-          {patterns.map((p) => <option key={p} value={p}>{p}</option>)}
-        </select>
-        <button
-          onClick={handleAnalyze}
-          disabled={loading || !pattern}
-          className="px-6 py-2 rounded font-semibold text-black disabled:opacity-50"
-          style={{ background: 'var(--accent-blue)' }}
-        >
-          {loading ? 'Analyzing...' : 'Analyze'}
-        </button>
+        {target === null && !patLoading && (
+          <Panel title="Pick a symbol and a pattern to test it">
+            <EmptyState height={120}>
+              Nothing has been analysed yet. Choose a symbol and a pattern above, then press Analyze.
+            </EmptyState>
+          </Panel>
+        )}
+
+        {target !== null && q.error && (
+          <ErrorPanel error={q.error} onRetry={() => void q.refetch()} />
+        )}
+
+        {loading && (
+          <>
+            <Panel title="Loading the candidate…"><Loading height={90} /></Panel>
+            <Panel title="Loading the price chart…"><Loading height={280} /></Panel>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+              <Panel flex="2 1 520px" title="Loading out-of-sample results…"><Loading height={200} /></Panel>
+              <Panel flex="1 1 320px" title="Loading trades…"><Loading height={200} /></Panel>
+            </div>
+            <Panel title="Loading the checks…"><Loading height={120} /></Panel>
+          </>
+        )}
+
+        {c && (
+          <>
+            <Hero c={c} />
+            <PriceChart c={c} />
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'stretch' }}>
+              <OosPanel c={c} />
+              <TradesPanel c={c} />
+            </div>
+            <GatesPanel c={c} />
+            {c.note && <div style={sub}>{c.note}</div>}
+          </>
+        )}
       </div>
-
-      {patLoading && <LoadingSpinner text="Loading patterns..." />}
-      {patError && <ErrorPanel error={patError} onRetry={retryPatterns} />}
-      {error && !loading && <ErrorPanel error={error} onRetry={retry} />}
-
-      {loading && <LoadingSpinner text="Fetching data, detecting patterns, running backtest..." />}
-
-      {result && ohlcv.length === 0 && !loading && (
-        <p style={{ color: 'var(--text-secondary)' }}>No price data returned for {symbol}.</p>
-      )}
-
-      {done && ohlcv.length > 0 && !loading && (
-        <>
-          {/* Candlestick Chart */}
-          <div className="rounded-lg mb-6 p-4" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
-            <Plot
-              data={[
-                {
-                  type: 'candlestick',
-                  x: ohlcv.map((d) => d.date),
-                  open: ohlcv.map((d) => d.open),
-                  high: ohlcv.map((d) => d.high),
-                  low: ohlcv.map((d) => d.low),
-                  close: ohlcv.map((d) => d.close),
-                  increasing: { line: { color: '#00ff88' } },
-                  decreasing: { line: { color: '#ff4444' } },
-                  name: symbol,
-                },
-                ...(signals?.buys?.length ? [{
-                  type: 'scatter' as const,
-                  mode: 'markers' as const,
-                  x: signals.buys.map((b) => b.date),
-                  y: signals.buys.map((b) => b.price),
-                  marker: { symbol: 'triangle-up', size: 12, color: '#00ff88' },
-                  name: 'Buy',
-                }] : []),
-                ...(signals?.sells?.length ? [{
-                  type: 'scatter' as const,
-                  mode: 'markers' as const,
-                  x: signals.sells.map((s) => s.date),
-                  y: signals.sells.map((s) => s.price),
-                  marker: { symbol: 'triangle-down', size: 12, color: '#ff4444' },
-                  name: 'Sell',
-                }] : []),
-              ]}
-              layout={{
-                title: `${symbol} — ${pattern}`,
-                xaxis: { rangeslider: { visible: false }, color: '#8b949e', gridcolor: '#21262d' },
-                yaxis: { color: '#8b949e', gridcolor: '#21262d' },
-                paper_bgcolor: 'transparent',
-                plot_bgcolor: 'transparent',
-                font: { color: '#e6edf3' },
-                height: 450,
-                margin: { t: 40, b: 40, l: 50, r: 20 },
-                showlegend: true,
-                legend: { x: 0, y: 1, bgcolor: 'transparent' },
-              }}
-              useResizeHandler
-              style={{ width: '100%' }}
-            />
-          </div>
-
-          {/* Metrics */}
-          {m && (
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-6">
-              <MetricCard label="Win Rate" value={pct(m.win_rate)} color={m.win_rate != null && m.win_rate >= 0.52 ? 'var(--accent-green)' : 'var(--accent-red)'} />
-              <MetricCard label="Profit Factor" value={num(m.profit_factor)} />
-              <MetricCard label="Sharpe" value={num(m.sharpe)} />
-              <MetricCard label="Total Return" value={pct(m.total_return)} color={signColor(m.total_return)} />
-              <MetricCard label="Max Drawdown" value={pct(m.max_drawdown)} color="var(--accent-red)" />
-              <MetricCard label="Trades" value={m.total_trades ?? 'n/a'} />
-            </div>
-          )}
-
-          {/* Equity Curve */}
-          {(backtest?.equity_curve.length ?? 0) > 0 && (
-            <div className="rounded-lg mb-6 p-4" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
-              <Plot
-                data={[{
-                  type: 'scatter',
-                  mode: 'lines',
-                  x: backtest!.equity_curve.map((d) => d.date),
-                  y: backtest!.equity_curve.map((d) => d.value),
-                  line: { color: '#58a6ff', width: 2 },
-                  name: 'Equity',
-                }]}
-                layout={{
-                  title: 'Equity Curve',
-                  xaxis: { color: '#8b949e', gridcolor: '#21262d' },
-                  yaxis: { color: '#8b949e', gridcolor: '#21262d', title: 'Portfolio Value ($)' },
-                  paper_bgcolor: 'transparent',
-                  plot_bgcolor: 'transparent',
-                  font: { color: '#e6edf3' },
-                  height: 300,
-                  margin: { t: 40, b: 40, l: 60, r: 20 },
-                }}
-                useResizeHandler
-                style={{ width: '100%' }}
-              />
-            </div>
-          )}
-
-          {/* Trade Log */}
-          {(backtest?.trades.length ?? 0) > 0 && (
-            <div className="overflow-x-auto rounded-lg" style={{ border: '1px solid var(--border)' }}>
-              <h3 className="p-3 font-semibold" style={{ background: 'var(--bg-secondary)' }}>Trade Log ({backtest!.trades.length} trades)</h3>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr style={{ background: 'var(--bg-tertiary)' }}>
-                    <th className="text-left p-2">Entry</th>
-                    <th className="text-left p-2">Exit</th>
-                    <th className="text-left p-2">Dir</th>
-                    <th className="text-right p-2">Entry $</th>
-                    <th className="text-right p-2">Exit $</th>
-                    <th className="text-right p-2">PnL</th>
-                    <th className="text-left p-2">Reason</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {backtest!.trades.map((t, i) => (
-                    <tr key={i} className="border-t" style={{ borderColor: 'var(--border)' }}>
-                      <td className="p-2 font-mono text-xs">{t.entry_date?.slice(0, 10)}</td>
-                      <td className="p-2 font-mono text-xs">{t.exit_date?.slice(0, 10)}</td>
-                      <td className="p-2" style={{ color: t.direction === 'LONG' ? 'var(--accent-green)' : 'var(--accent-red)' }}>{t.direction}</td>
-                      <td className="p-2 text-right font-mono">{num(t.entry_price)}</td>
-                      <td className="p-2 text-right font-mono">{num(t.exit_price)}</td>
-                      <td className="p-2 text-right font-mono" style={{ color: signColor(t.pnl_pct) }}>
-                        {pct(t.pnl_pct, 2)}
-                      </td>
-                      <td className="p-2 text-xs" style={{ color: 'var(--text-secondary)' }}>{t.exit_reason}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
-      )}
     </div>
   );
 }
