@@ -1,5 +1,5 @@
 import type { components } from '../api/schema';
-import { int, isNum, signedPct } from '../lib/format';
+import { int, isNum, money, multiple, signedPct } from '../lib/format';
 
 type S = components['schemas'];
 type Risk = S['RiskStatusResponse'];
@@ -82,3 +82,86 @@ export function funnelItems(f: Funnel) {
   return rows.map(([label, value]) => ({ label, value, display: int(value) }));
 }
 
+
+/* ---------- account (D14): net worth, margin, leverage ---------- */
+
+export type AccountBlock = S['AccountBlock'];
+
+export const DEFAULT_LEVERAGE_WARN = 1.0;
+
+/** The warn threshold the backend reports, or 1.0x. */
+export function leverageThreshold(a: { max_leverage_warn?: number | null } | null | undefined): number {
+  return isNum(a?.max_leverage_warn) ? (a!.max_leverage_warn as number) : DEFAULT_LEVERAGE_WARN;
+}
+
+/** Fraction positions can fall before equity is zero. equity = G(1-f) - L = 0, f = 1 - L/G = N/G = 1/leverage. */
+export function wipeoutFall(leverage: number | null | undefined): number | null {
+  return isNum(leverage) && leverage > 0 ? 1 / leverage : null;
+}
+
+/** Warn only strictly above the threshold. */
+export function isOverLeveraged(leverage: number | null | undefined, threshold = DEFAULT_LEVERAGE_WARN): boolean {
+  return isNum(leverage) && leverage > threshold;
+}
+
+/** Factual margin warning computed from the data, or null when leverage is within the threshold. */
+export function leverageWarningText(
+  leverage: number | null | undefined, marginLoan: number | null | undefined, currency: string | null | undefined,
+  threshold = DEFAULT_LEVERAGE_WARN,
+): string | null {
+  if (!isOverLeveraged(leverage, threshold)) return null;
+  const fall = wipeoutFall(leverage);
+  const borrow = isNum(marginLoan) && marginLoan > 0 ? `You are borrowing ${money(marginLoan, currency, 0)} on margin (${multiple(leverage)}).` : `Your leverage is ${multiple(leverage)}.`;
+  return `${borrow}${fall === null ? '' : ` A ${(fall * 100).toFixed(0)}% fall in your holdings would wipe out your equity.`}`;
+}
+
+/** 'IBKR snapshot as of 2026-09-30 14:05 UTC' or 'holdings.csv'. */
+export function sourceLabel(source: string | null | undefined, asOf: string | null | undefined): string {
+  if (source === 'ibkr') {
+    const m = asOf ? /^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}:\d{2}))?/.exec(asOf) : null;
+    return `IBKR snapshot as of ${m ? `${m[1]}${m[2] ? ` ${m[2]} UTC` : ''}` : 'an unknown time'}`;
+  }
+  return 'holdings.csv';
+}
+
+/** Value of each asset group in the base currency. The backend's own group value is used when it sends one; the
+ * share of a group is over CLASSIFIED symbols only, so share x positions value is only the fallback for an old
+ * response and overstates every group when something is unclassified. */
+export function groupValues(groups: S['GroupWeight'][], positionsValue: number | null | undefined) {
+  return groups.map((g) => ({
+    key: g.key, label: g.label, share: g.now,
+    value: isNum(g.value) ? g.value : isNum(positionsValue) ? g.now * positionsValue : null,
+  }));
+}
+
+export type ValueRow = { key: string; label: string; value: number; share: number | null };
+
+/** Rows of 'Where the money is': one per asset group plus an 'Unclassified' row for priced holdings that are in no
+ * group, so the values add up to the priced positions. Shares are of that total. null when a group has no value. */
+export function groupValueRows(
+  groups: S['GroupWeight'][], unclassified: number | null | undefined, positionsValue: number | null | undefined,
+): ValueRow[] | null {
+  const g = groupValues(groups, positionsValue);
+  if (g.length === 0 || !g.every((x) => isNum(x.value))) return null;
+  const rows: { key: string; label: string; value: number }[] = g.map((x) => ({ key: x.key, label: x.label, value: x.value as number }));
+  if (isNum(unclassified) && unclassified > 0.5) rows.push({ key: 'unclassified', label: 'Unclassified', value: unclassified });
+  const total = rows.reduce((a, r) => a + r.value, 0);
+  return rows.map((r) => ({ ...r, share: total > 0 ? r.value / total : null }));
+}
+
+/** 'Positions X · Margin loan −Y · Other ±Z · Net N' parts: Other is the reconciling difference (stale closes,
+ * accruals, unvalued items) and is shown only when it would change a displayed figure. */
+export function otherLine(other: number | null | undefined): number | null {
+  return isNum(other) && Math.abs(other) >= 0.5 ? other : null;
+}
+
+/** Hero 'cash' stat: a negative cash balance is the margin loan (shown in the breakdown), so nothing is available. */
+export function cashAvailable(cash: number | null | undefined): number | null {
+  return isNum(cash) ? Math.max(cash, 0) : null;
+}
+
+export function profileLabel(profile: string | null | undefined): string {
+  return (profile ?? 'us').toLowerCase() === 'cad'
+    ? 'CAD profile (D14, approved)'
+    : 'US profile';
+}

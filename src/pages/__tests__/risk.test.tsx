@@ -5,7 +5,7 @@ import { renderWithClient } from '../../test/utils'
 import { server } from '../../test/server'
 import { riskPageFixture as fx } from '../../test/handlers'
 import Risk from '../Risk'
-import { decisionsTitle, equityTitle, etTime, limitsTitle, worstDrawdown } from '../riskModel'
+import { accountStatus, decisionsTitle, equityTitle, etTime, limitsTitle, worstDrawdown } from '../riskModel'
 
 const render = () => renderWithClient(<Risk />)
 const use = (body: object) => server.use(http.get('*/api/risk/status', () => HttpResponse.json(body)))
@@ -149,5 +149,29 @@ describe('riskModel', () => {
     expect(etTime('2026-09-28T21:42:00', now)).toBe('Mon 17:42')
     expect(etTime('2026-09-28T21:42:00', Date.parse('2026-10-05T12:00:00Z'))).toBe('Mon 28 Sep 17:42')
     expect(etTime('garbage')).toBe('garbage')
+  })
+})
+
+describe('Risk account (IBKR) panel', () => {
+  it('shows net liquidation, margin loan, leverage, excess liquidity, maintenance margin and a status glyph + word', async () => {
+    use(fx)
+    render()
+    const panel = await screen.findByRole('region', { name: 'Account (IBKR)' })
+    const w = within(panel)
+    expect(w.getByText('Net liquidation').nextSibling).toHaveTextContent('CA$100,000')
+    expect(w.getByText('Margin loan').nextSibling).toHaveTextContent('−CA$57,000')
+    expect(w.getByText('Leverage').nextSibling).toHaveTextContent('1.57x')
+    expect(w.getByText('Excess liquidity').nextSibling).toHaveTextContent('CA$31,000')
+    expect(w.getByText('Maintenance margin').nextSibling).toHaveTextContent('CA$52,000')
+    const status = w.getByText('Status').nextSibling as HTMLElement
+    expect(status).toHaveTextContent('! Leveraged above 1.00x')
+    expect(status.querySelector('[data-status="warn"]')).not.toBeNull()
+  })
+  it('status logic', () => {
+    expect(accountStatus({ leverage: 0.9, margin_headroom: 5000 }).kind).toBe('pass')
+    expect(accountStatus({ leverage: 1.0 }).kind).toBe('pass')
+    expect(accountStatus({ leverage: 1.57 }).kind).toBe('warn')
+    expect(accountStatus({ leverage: 1.57, margin_headroom: 0 }).kind).toBe('fail')
+    expect(accountStatus({ available: false }).kind).toBe('recorded')
   })
 })

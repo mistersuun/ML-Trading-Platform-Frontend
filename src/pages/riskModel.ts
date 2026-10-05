@@ -87,3 +87,20 @@ export function etTime(ts: string, now: number = Date.now()): string {
 
 export const label = (s: string | null | undefined) =>
   s ? s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, ' ') : '–';
+
+/* ---------- IBKR account panel (D14) ---------- */
+
+export type AccountStatus = { kind: 'pass' | 'warn' | 'fail' | 'recorded'; word: string };
+
+/** Status of the account block: glyph + word. No headroom is a fail; leverage above the threshold is a warn. */
+export function accountStatus(a: { available?: boolean; leverage?: number | null; margin_headroom?: number | null; max_leverage_warn?: number | null }): AccountStatus {
+  if (a.available === false) return { kind: 'recorded', word: 'Not available' };
+  if (typeof a.margin_headroom === 'number' && Number.isFinite(a.margin_headroom) && a.margin_headroom <= 0) {
+    return { kind: 'fail', word: 'No margin headroom' };
+  }
+  const threshold = typeof a.max_leverage_warn === 'number' && Number.isFinite(a.max_leverage_warn) ? a.max_leverage_warn : 1;
+  if (typeof a.leverage === 'number' && Number.isFinite(a.leverage) && a.leverage > threshold) {
+    return { kind: 'warn', word: `Leveraged above ${threshold.toFixed(2)}x` };
+  }
+  return { kind: 'pass', word: 'Within leverage limit' };
+}

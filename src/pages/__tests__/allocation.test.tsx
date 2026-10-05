@@ -6,7 +6,7 @@ import { renderWithClient } from '../../test/utils'
 import { server } from '../../test/server'
 import { allocationFixture } from '../../test/handlers'
 import Allocation from '../Allocation'
-import { parseContribution, driftTitle, mixTitle, trendTitle, tradesTitle } from '../allocationModel'
+import { parseContribution, driftTitle, mixTitle, trendTitle, tradesTitle, proposalCurrency, investedManaged, cashLines } from '../allocationModel'
 
 const serve = (data: object = allocationFixture, onReq?: (url: URL) => void) =>
   server.use(http.get('*/api/allocation/proposal', ({ request }) => {
@@ -31,6 +31,42 @@ describe('Allocation data', () => {
     const table = screen.getByRole('table', { name: 'Proposed trades' })
     expect(within(table).getByText('VEA').closest('tr')).toHaveTextContent('Buy41$2,112')
     expect(screen.getByText('Cash left after trades: $150')).toBeInTheDocument()
+  })
+
+  it('uses the backend base_currency, not the profile, for every amount (CAD amounts under the us profile)', async () => {
+    serve({ ...allocationFixture, profile: 'us', base_currency: 'CAD' })
+    render()
+    expect(await screen.findByText('CA$119,820')).toBeInTheDocument()
+    expect(screen.getByText('CA$4,560 + CA$0')).toBeInTheDocument()
+    expect(screen.getByText('Cash left after trades: CA$150')).toBeInTheDocument()
+    expect(screen.getByLabelText('Contribution').closest('label')).toHaveTextContent('Contribution CA$')
+    expect(screen.queryByText('$119,820')).not.toBeInTheDocument()
+  })
+
+  it('currency and invested helpers', () => {
+    expect(proposalCurrency({ base_currency: 'CAD', profile: 'us' })).toBe('CAD')
+    expect(proposalCurrency({ base_currency: 'USD', profile: 'cad' })).toBe('USD')
+    expect(proposalCurrency({ profile: 'cad' })).toBe('CAD')            // an old response without the field
+    expect(proposalCurrency({})).toBe('USD')
+    expect(investedManaged({ ...allocationFixture, total_value: 100000, cash: -57000, managed_value: 10000 } as never)).toBe(10000)      // the loan is not in the sleeve
+    expect(investedManaged({ ...allocationFixture, total_value: 100000, cash: 3000, managed_value: 13000 } as never)).toBe(10000)
+    expect(investedManaged({ ...allocationFixture, total_value: 124380, cash: 4560 } as never)).toBe(119820)
+  })
+
+  it('cash lines never go negative: the loan is its own line', () => {
+    const loan = { ...allocationFixture, cash: -57000, contribution: 2000, margin_loan: 57000, contribution_to_loan: 2000, margin_loan_after: 55000 } as never
+    expect(cashLines(loan)).toEqual({ cash: 0, contribution: 2000, loan: 57000, toLoan: 2000 })
+    expect(cashLines({ ...allocationFixture, cash: 4560, contribution: 0 } as never)).toEqual({ cash: 4560, contribution: 0, loan: 0, toLoan: 0 })
+  })
+
+  it('shows own cash + contribution, the loan on its own line and what is applied to it', async () => {
+    serve({ ...allocationFixture, base_currency: 'CAD', cash: -57000, contribution: 2000, margin_loan: 57000, contribution_to_loan: 2000, margin_loan_after: 55000, managed_value: 119820 })
+    render()
+    expect(await screen.findByText('CA$0 + CA$2,000')).toBeInTheDocument()
+    expect(screen.queryByText(/−CA\$57,000 \+/)).not.toBeInTheDocument()
+    expect(screen.getByText('Margin loan').nextSibling).toHaveTextContent('−CA$57,000')
+    expect(screen.getByText('Applied to loan').nextSibling).toHaveTextContent('CA$2,000')
+    expect(screen.getByText(/Margin loan after repayment: −CA\$55,000/)).toBeInTheDocument()
   })
 
   it('panel titles are computed from the data', async () => {
@@ -155,5 +191,29 @@ describe('Allocation interactions', () => {
     render()
     const now = await screen.findByRole('img', { name: /^Mix now:/ })
     expect(now.querySelector('[data-segment="International equity"]')).toHaveAttribute('title', 'International equity 17.8%')
+  })
+})
+
+describe('Allocation margin and profile', () => {
+  const note = 'Reduce margin loan first: 57,000.00 is borrowed (1.57x leverage). Nothing here spends borrowed money.'
+  it('shows the Reduce margin loan line prominently above the trades when leverage > 1, and the CAD profile line', async () => {
+    serve({ ...allocationFixture, profile: 'cad', leverage: 1.57, margin_loan: 57000, notes: [note, 'Another note.'] })
+    render()
+    const banner = await screen.findByTestId('reduce-margin')
+    expect(banner).toHaveTextContent('Reduce margin loan first: 57,000.00 is borrowed')
+    expect(banner).toHaveTextContent('A 64% fall in your holdings would wipe out your equity.')
+    expect(screen.getAllByText(/Reduce margin loan first/)).toHaveLength(1)
+    const trades = await screen.findByRole('table', { name: 'Proposed trades' })
+    expect(banner.compareDocumentPosition(trades) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByTestId('profile-line')).toHaveTextContent('CAD profile (D14, approved)')
+    expect(screen.getByText('Another note.')).toBeInTheDocument()
+    expect(screen.getByText('CA$119,820')).toBeInTheDocument()
+  })
+  it('no margin line at or below 1x, and the US profile by default', async () => {
+    serve({ ...allocationFixture, leverage: 1.0 })
+    render()
+    expect(await screen.findByText('$119,820')).toBeInTheDocument()
+    expect(screen.queryByTestId('reduce-margin')).not.toBeInTheDocument()
+    expect(screen.getByTestId('profile-line')).toHaveTextContent('US profile')
   })
 })

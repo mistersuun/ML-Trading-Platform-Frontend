@@ -6,9 +6,10 @@ import ErrorPanel from '../components/ErrorPanel';
 import { DataTable, EmptyState, Hero, PageHeader, Panel, type Column, type Tone } from '../components/ui';
 import { DivergingBars, SparklinePair, StackedBar } from '../components/charts';
 import { SERIES, T } from '../lib/tokens';
-import { isNum, pct, usd } from '../lib/format';
+import { currencyPrefix, isNum, money, multiple, pct } from '../lib/format';
+import { isOverLeveraged, profileLabel, wipeoutFall } from './overviewModel';
 import {
-  driftTitle, furthestRow, parseContribution, longDate, mixTitle, signedPts, stateLabel, tradeSummary, tradesTitle, trendTitle,
+  driftTitle, furthestRow, proposalCurrency, investedManaged, cashLines, parseContribution, longDate, mixTitle, signedPts, stateLabel, tradeSummary, tradesTitle, trendTitle,
   voteGlyphs, votesLabel, type Group, type Proposal, type Row, type Trend,
 } from './allocationModel';
 
@@ -38,15 +39,19 @@ const useProposal = (contribution: number) =>
 const Loading = ({ what, height }: { what: string; height?: number }) => <EmptyState height={height}>Loading {what}…</EmptyState>;
 
 function Summary({ p }: { p: Proposal }) {
+  const { cash, contribution, loan, toLoan } = cashLines(p);
+  const ccy = proposalCurrency(p);
   const far = furthestRow(p.rows);
   const farTone: Tone = far?.outside ? 'warn' : 'neutral';
   return (
     <Panel flex="2 1 420px" style={{ display: 'flex', alignItems: 'flex-start' }}>
       <Hero
         label="Invested in core + trend"
-        value={usd(p.total_value - p.cash, 0)}
+        value={money(investedManaged(p), proposalCurrency(p), 0)}
         stats={[
-          { label: 'Cash + this contribution', value: `${usd(p.cash, 0)} + ${usd(p.contribution, 0)}` },
+          { label: 'Cash + this contribution', value: `${money(cash, ccy, 0)} + ${money(contribution, ccy, 0)}` },
+          ...(loan > 0 ? [{ label: 'Margin loan', value: `−${money(loan, ccy, 0)}`, tone: 'warn' as Tone }] : []),
+          ...(toLoan > 0 ? [{ label: 'Applied to loan', value: money(toLoan, ccy, 0) }] : []),
           { label: 'Furthest from target', value: far ? `${far.symbol} ${signedPts(far.drift)} pts` : 'n/a', tone: farTone },
           { label: 'Trades proposed', value: tradeSummary(p) },
         ]}
@@ -55,21 +60,42 @@ function Summary({ p }: { p: Proposal }) {
   );
 }
 
-const tradeColumns: Column<Proposal['trades'][number]>[] = [
+const tradeColumns = (ccy: string): Column<Proposal['trades'][number]>[] => [
   { key: 'symbol', header: 'ETF', render: (t) => <b>{t.symbol}</b> },
   { key: 'action', header: 'Action', render: (t) => (t.action === 'sell' ? 'Sell' : 'Buy') },
   { key: 'shares', header: 'Shares', align: 'right', render: (t) => t.shares },
-  { key: 'amount', header: 'Amount', align: 'right', render: (t) => usd(t.amount, 0) },
+  { key: 'amount', header: 'Amount', align: 'right', render: (t) => money(t.amount, ccy, 0) },
 ];
+
+export const REDUCE_MARGIN = 'Reduce margin loan first';
+
+/** Prominent margin line above the trades; the backend's own note when it sent one, else computed from the leverage. */
+function MarginFirst({ p }: { p: Proposal }) {
+  if (!isOverLeveraged(p.leverage)) return null;
+  const note = (p.notes ?? []).find((n) => n.startsWith(REDUCE_MARGIN));
+  const fall = wipeoutFall(p.leverage);
+  const text = note ?? `${REDUCE_MARGIN}: ${isNum(p.margin_loan) ? `${money(p.margin_loan, proposalCurrency(p), 0)} is borrowed` : 'money is borrowed'} (${multiple(p.leverage)} leverage).`;
+  return (
+    <div role="alert" data-testid="reduce-margin" style={{
+      background: 'var(--warn-surface)', border: '1px solid var(--border-strong)', borderRadius: 4, padding: '10px 14px', fontSize: 15, fontWeight: 600,
+    }}>
+      <span style={{ color: 'var(--warn)' }} aria-hidden="true">! </span>{text}
+      {fall !== null && <div style={{ ...sub, fontWeight: 400, marginTop: 4 }}>A {(fall * 100).toFixed(0)}% fall in your holdings would wipe out your equity.</div>}
+    </div>
+  );
+}
 
 function TradesPanel({ p }: { p: Proposal }) {
   return (
     <Panel flex="1 1 300px" title={tradesTitle(p)} subtitle="Proposed trades, cash first, whole shares">
-      <DataTable columns={tradeColumns} rows={p.trades} rowKey={(t) => `${t.action}-${t.symbol}`}
+      <DataTable columns={tradeColumns(proposalCurrency(p))} rows={p.trades} rowKey={(t) => `${t.action}-${t.symbol}`}
         caption="Proposed trades" empty="No trades proposed." />
-      <div style={{ ...sub, marginTop: 8 }}>Cash left after trades: {usd(p.cash_after, 0)}</div>
+      <div style={{ ...sub, marginTop: 8 }}>Cash left after trades: {money(p.cash_after, proposalCurrency(p), 0)}</div>
+      {isNum(p.margin_loan_after) && p.margin_loan_after > 0 && (
+        <div style={{ ...sub, marginTop: 4 }}>Margin loan after repayment: −{money(p.margin_loan_after, proposalCurrency(p), 0)}</div>
+      )}
       {(p.unmanaged ?? []).length > 0 && <div style={{ ...sub, marginTop: 4 }}>Not managed here: {(p.unmanaged ?? []).join(', ')}</div>}
-      {(p.notes ?? []).map((n) => <div key={n} style={{ ...sub, marginTop: 4 }}>{n}</div>)}
+      {(p.notes ?? []).filter((n) => !(isOverLeveraged(p.leverage) && n.startsWith(REDUCE_MARGIN))).map((n) => <div key={n} style={{ ...sub, marginTop: 4 }}>{n}</div>)}
     </Panel>
   );
 }
@@ -190,10 +216,10 @@ function Skeleton() {
 
 /* ---------- page ---------- */
 
-function ContributionField({ text, onText, invalid }: { text: string; onText: (t: string) => void; invalid: boolean }) {
+function ContributionField({ text, onText, invalid, currency }: { text: string; onText: (t: string) => void; invalid: boolean; currency: string }) {
   return (
     <label style={{ display: 'flex', alignItems: 'center', gap: 6, ...sub, fontSize: 13 }}>
-      Contribution $
+      Contribution {currencyPrefix(currency)}
       <input className="field" inputMode="decimal" aria-label="Contribution" aria-invalid={invalid}
         value={text} onChange={(e) => onText(e.target.value)} placeholder="0" style={{ width: 90 }} />
       {invalid && <span role="alert" style={{ color: 'var(--warn)' }}>Enter 0 or more</span>}
@@ -223,6 +249,8 @@ export default function Allocation() {
     body = (
       <>
         {q.isError && <ErrorPanel error={q.error} onRetry={() => void q.refetch()} />}
+        <div style={sub} data-testid="profile-line">Allocation profile: {profileLabel(p.profile)}</div>
+        <MarginFirst p={p} />
         <section aria-label="Proposal summary" style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'stretch' }}>
           <Summary p={p} />
           <TradesPanel p={p} />
@@ -243,7 +271,7 @@ export default function Allocation() {
         meta={p ? `Quarterly review · prices at close ${longDate(p.as_of)}` : 'Quarterly review'}
         actions={
           <>
-            <ContributionField text={text} onText={setText} invalid={parsed === null} />
+            <ContributionField text={text} onText={setText} invalid={parsed === null} currency={p ? proposalCurrency(p) : "USD"} />
             <span style={{ ...sub, fontSize: 13, marginLeft: 8 }}>{BANNER}</span>
           </>
         }

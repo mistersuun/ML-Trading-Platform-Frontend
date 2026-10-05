@@ -6,12 +6,12 @@ import { useLatestScan } from '../api/hooks';
 import { MINUTE } from '../api/query';
 import type { components } from '../api/schema';
 import ErrorPanel from '../components/ErrorPanel';
-import { Hero, PageHeader, Panel, EmptyState, Status, type Tone } from '../components/ui';
+import { Hero, Meter, PageHeader, Panel, EmptyState, Status, type Tone } from '../components/ui';
 import { BulletBar, DrawdownChart, HBarList, LineChart, StackedBar } from '../components/charts';
-import { RANGES, allocationTitle, funnelItems, funnelTitle, performanceTitle, rangeLabel, riskTitle, tradesSummary, type Range } from './overviewModel';
+import { RANGES, allocationTitle, funnelItems, funnelTitle, groupValueRows, otherLine, cashAvailable, leverageThreshold, leverageWarningText, sourceLabel, performanceTitle, rangeLabel, riskTitle, tradesSummary, type Range } from './overviewModel';
 import { evenIndices } from '../components/charts/scale';
 import { T, SERIES } from '../lib/tokens';
-import { int, isNum, pct, signedNum, signedPct, signedUsd, usd } from '../lib/format';
+import { int, isNum, money, multiple, pct, signedMoney, signedNum, signedPct, usd } from '../lib/format';
 
 type S = components['schemas'];
 type Overview = S['OverviewResponse'];
@@ -79,6 +79,9 @@ function tickLabel(iso: string, short: boolean): string {
   return short ? `${m} ${d.getUTCDate()}` : `${m} ${String(d.getUTCFullYear()).slice(2)}`;
 }
 
+/** Backend warnings minus its leverage sentence, which the hero shows computed from the numbers. */
+const bannerWarnings = (d: Overview) => (d.warnings ?? []).filter((w) => !/^Leverage \d/.test(w));
+
 /* ---------- panels ---------- */
 
 function NoHoldings() {
@@ -106,31 +109,58 @@ function ValuePanels({ d, range }: { d: Overview; range: Range }) {
   const rangeShort = range === 'All' ? 'all time' : range;
   const dayTone = tone(d.day_change);
   const paper = d.paper_sleeve;
-  const rows: { key: string; label: ReactNode; value: ReactNode }[] = d.accounts.map((a) => ({
-    key: a.key, label: a.label, value: usd(a.value, 0),
-  }));
+  const ccy = d.base_currency;
+  const acct = d.account ?? null;
+  const net = isNum(d.net_worth) ? d.net_worth : d.total_value;
+  const lev = isNum(d.leverage) ? d.leverage : acct?.leverage;
+  const threshold = leverageThreshold(acct);
+  const loan = isNum(d.margin_loan) ? d.margin_loan : acct?.margin_loan;
+  const positions = isNum(d.positions_value) ? d.positions_value : acct?.positions_value;
+  const warning = leverageWarningText(lev, loan, ccy, threshold);
+  const groupRows = groupValueRows(d.allocation, d.unclassified_value, positions);
+  const other = otherLine(d.other_value);
+  const rows: { key: string; label: ReactNode; value: ReactNode; share?: number | null }[] = groupRows
+    ? groupRows.map((g) => ({ key: g.key, label: g.label, value: money(g.value, ccy, 0), share: g.share }))
+    : d.accounts.map((a) => ({ key: a.key, label: a.label, value: money(a.value, ccy, 0), share: a.share }));
+  const meterMax = Math.max(2, Math.ceil(isNum(lev) ? lev : 0));
   return (
     <section aria-label="Portfolio value" style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'stretch' }}>
-      <Panel flex="2 1 420px" style={{ display: 'flex', alignItems: 'flex-start' }}>
+      <Panel flex="2 1 420px" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 14 }}>
         <Hero
-          label="Total portfolio value"
-          value={usd(d.total_value)}
+          label="Net worth"
+          value={money(net, ccy)}
           delta={isNum(d.day_change)
-            ? { text: `${signedUsd(d.day_change)}${isNum(d.day_change_pct) ? ` (${signedPct(d.day_change_pct, 2)})` : ''}`, tone: dayTone, note: 'today' }
+            ? { text: `${signedMoney(d.day_change, ccy)}${isNum(d.day_change_pct) ? ` (${signedPct(d.day_change_pct, 2)})` : ''}`, tone: dayTone, note: 'today' }
             : null}
           stats={[
             { label: `Return, ${rangeShort}`, value: signedPct(d.period_return), tone: tone(d.period_return) },
             { label: d.benchmark_label, value: signedPct(d.benchmark_return) },
             { label: 'Max drawdown', value: signedPct(d.max_drawdown), tone: isNum(d.max_drawdown) && d.max_drawdown < 0 ? 'down' : 'neutral' },
-            { label: 'Cash available', value: usd(d.cash, 0) },
+            { label: 'Cash available', value: money(cashAvailable(d.cash), ccy, 0) },
           ]}
         />
+        <div data-testid="net-breakdown" style={{ color: 'var(--text-2)', fontSize: 13 }}>
+          Positions {money(positions, ccy, 0)} · Margin loan {isNum(loan) && loan > 0 ? `−${money(loan, ccy, 0)}` : money(0, ccy, 0)}{other !== null && ` · Other ${signedMoney(other, ccy, 0)}`} · Net {money(net, ccy, 0)}
+        </div>
+        {isNum(lev) && (
+          <div style={{ width: '100%', maxWidth: 420 }}>
+            <div className="sub" style={{ marginBottom: 4 }}>Leverage (positions ÷ net worth), warns above {multiple(threshold)}</div>
+            <Meter label="Leverage" value={lev} max={meterMax} text={multiple(lev)} warnAt={threshold + 1e-9} />
+          </div>
+        )}
+        {warning && (
+          <div role="note" aria-label="Margin warning" data-testid="leverage-warning"
+            style={{ background: 'var(--warn-surface)', border: '1px solid var(--border-strong)', borderRadius: 4, padding: '8px 12px', width: '100%' }}>
+            <Status kind="warn" /> {warning}
+          </div>
+        )}
       </Panel>
       <Panel flex="1 1 300px" title="Where the money is">
         <div style={{ display: 'flex', flexDirection: 'column', marginTop: 6 }}>
           {rows.map((r) => (
-            <div key={r.key} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
-              <span>{r.label}</span><span>{r.value}</span>
+            <div key={r.key} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
+              <span>{r.label}</span>
+              <span>{r.value}{isNum(r.share) && <span className="sub"> · {pct(r.share, 0)}</span>}</span>
             </div>
           ))}
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', color: 'var(--text-2)' }}>
@@ -138,6 +168,7 @@ function ValuePanels({ d, range }: { d: Overview; range: Range }) {
             <span>{isNum(paper.value) ? `${usd(paper.value, 0)} (not real money)` : 'no reading yet'}</span>
           </div>
         </div>
+        <div className="sub" data-testid="source-label" style={{ marginTop: 8 }}>{sourceLabel(d.source, acct?.as_of)}</div>
       </Panel>
     </section>
   );
@@ -451,9 +482,9 @@ export default function Overview() {
           <ErrorPanel error={overview.error} onRetry={() => void overview.refetch()} />
         ) : (
           <>
-            {d!.warnings && d!.warnings.length > 0 && (
+            {bannerWarnings(d!).length > 0 && (
               <div role="note" style={{ background: 'var(--warn-surface)', border: '1px solid var(--border-strong)', borderRadius: 4, padding: '8px 12px' }}>
-                <Status kind="warn" /> {d!.warnings.join(' ')}
+                <Status kind="warn" /> {bannerWarnings(d!).join(' ')}
               </div>
             )}
             <ValuePanels d={d!} range={range} />

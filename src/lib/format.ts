@@ -80,3 +80,35 @@ export function xTickCount(): number {
   const w = typeof window === 'undefined' ? 1024 : window.innerWidth;
   return w < 560 ? 3 : 5;
 }
+
+/** Currency prefix. USD (or unknown) is '$'; CAD is always 'CA$'; any other code is 'XXX '. */
+export function currencyPrefix(currency?: string | null): string {
+  const c = (currency ?? 'USD').toUpperCase();
+  if (c === 'USD') return '$';
+  if (c === 'CAD') return 'CA$';
+  return `${c} `;
+}
+
+const group = (abs: number, digits: number) =>
+  abs.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+
+/** Amount in a currency. money(1234.5, 'CAD') === 'CA$1,234.50'; negatives use a true minus. */
+export function money(value: number | null | undefined, currency?: string | null, digits = 2): string {
+  if (!isNum(value)) return NA;
+  const s = group(Math.abs(value), digits);
+  const zero = Number(s.replace(/,/g, '')) === 0;
+  return `${value < 0 && !zero ? MINUS : ''}${currencyPrefix(currency)}${s}`;
+}
+
+/** Signed amount in a currency with a true minus. signedMoney(612.4, 'CAD') === '+CA$612.40'. */
+export function signedMoney(value: number | null | undefined, currency?: string | null, digits = 2): string {
+  if (!isNum(value)) return NA;
+  const s = group(Math.abs(value), digits);
+  const zero = Number(s.replace(/,/g, '')) === 0;
+  return `${zero ? '' : value < 0 ? MINUS : '+'}${currencyPrefix(currency)}${s}`;
+}
+
+/** Leverage multiple. multiple(1.568) === '1.57x'. */
+export function multiple(value: number | null | undefined, digits = 2): string {
+  return isNum(value) ? `${value.toFixed(digits)}x` : NA;
+}

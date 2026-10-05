@@ -70,17 +70,33 @@ export const nightly = {
 
 // ---- Overview page fixtures (portfolio overview, risk status, allocation proposal, scan funnel) ----
 const ovDates = Array.from({ length: 30 }, (_, i) => `2026-09-${String(i + 1).padStart(2, '0')}`)
+// Invented numbers only: a CAD margin account, net 100,000 on 157,000 of holdings (1.57x).
+export const accountFixture = {
+  available: true, source: 'ibkr', as_of: '2026-09-30T20:05:00+00:00', age_hours: 3.5, base_currency: 'CAD',
+  net_worth: 100000, positions_value: 157000, cash: -57000, margin_loan: 57000, leverage: 1.57,
+  max_leverage_warn: 1.0, margin_headroom: 31000, maint_margin: 52000, buying_power: 62000, positions: 13,
+  warnings: ['Leverage 1.57x is above the 1.00x warning level (margin loan 57,000 CAD). Reduce the margin loan before adding new positions.'],
+  note: null,
+}
 export const overviewFixture = {
   as_of: '2026-09-30',
   range: '1Y',
-  total_value: 124380.52,
+  base_currency: 'CAD',
+  source: 'ibkr',
+  total_value: 100000,
+  net_worth: 100000,
+  positions_value: 157000,
+  margin_loan: 57000,
+  leverage: 1.57,
+  margin_headroom: 31000,
+  account: accountFixture,
   day_change: 612.4,
   day_change_pct: 0.0049,
-  cash: 4560,
+  cash: -57000,
   accounts: [
-    { key: 'core', label: 'Core portfolio · IBKR', value: 107940, share: 0.868 },
-    { key: 'trend', label: 'Trend sleeve · IBKR', value: 11880, share: 0.096 },
-    { key: 'cash', label: 'Cash · IBKR', value: 4560, share: 0.037 },
+    { key: 'core', label: 'Core portfolio', value: 130000, share: 1.3 },
+    { key: 'trend', label: 'Trend sleeve', value: 27000, share: 0.27 },
+    { key: 'cash', label: 'Cash', value: -57000, share: -0.57 },
   ],
   paper_sleeve: { label: 'Alpaca paper', value: 9860, peak: 10000, drawdown: -0.014, as_of: '2026-09-30', note: '' },
   period_return: 0.152,
@@ -98,9 +114,27 @@ export const overviewFixture = {
     { key: 'us_equity', label: 'US equity', target: 0.356, now: 0.379, drift: 0.023 },
     { key: 'intl_equity', label: 'International equity', target: 0.256, now: 0.224, drift: -0.032 },
     { key: 'treasuries', label: 'Treasuries', target: 0.224, now: 0.213, drift: -0.011 },
+    { key: 'gold', label: 'Gold & miners', target: 0.1, now: 0.1, drift: 0 },
+    { key: 'thematic', label: 'Thematic & single names', target: 0.04, now: 0.04, drift: 0 },
+    { key: 'other', label: 'Other', target: 0.02, now: 0.044, drift: 0.024 },
   ],
   allocation_basis: 'Shares of invested value; cash excluded.',
   unpriced: [],
+  warnings: [accountFixture.warnings[0], 'The benchmark (SPY/IEF) is in US dollars and is not converted to CAD.'],
+}
+
+/** The same account with no borrowing, from holdings.csv. */
+export const unleveredOverviewFixture = {
+  ...overviewFixture,
+  source: 'holdings_csv', base_currency: 'USD', total_value: 124380.52, net_worth: 124380.52, positions_value: 119820.52,
+  margin_loan: 0, leverage: 0.96, margin_headroom: null, cash: 4560,
+  account: { ...accountFixture, source: 'holdings_csv', as_of: null, base_currency: 'USD', net_worth: 124380.52,
+    positions_value: 119820.52, cash: 4560, margin_loan: 0, leverage: 0.96, margin_headroom: null, maint_margin: null, warnings: [] },
+  accounts: [
+    { key: 'core', label: 'Core portfolio', value: 107940, share: 0.868 },
+    { key: 'trend', label: 'Trend sleeve', value: 11880, share: 0.096 },
+    { key: 'cash', label: 'Cash', value: 4560, share: 0.037 },
+  ],
   warnings: [],
 }
 
@@ -119,6 +153,7 @@ export const riskFixture = {
     { key: 'positions', label: 'Positions', used: 2, maximum: 8, unit: 'count' },
     { key: 'orders_today', label: 'Orders today', used: 1, maximum: 5, unit: 'count' },
   ],
+  account: accountFixture,
   equity_history: [], decision_window_days: 30, decision_total: 0, decision_reasons: [], decisions: [],
 }
 

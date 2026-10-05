@@ -21,6 +21,6 @@ export const T = {
   driftBand: '#1F1F26',
 } as const;
 
-export const SERIES = ['#3987E5', '#D95926', '#199E70', '#C98500', '#9085E9'] as const;
+export const SERIES = ['#3987E5', '#D95926', '#199E70', '#C98500', '#9085E9', '#D45F9C'] as const;
 export const RAMP = ['#86B6EF', '#6DA7EC', '#5598E7', '#3987E5', '#2A78D6', '#256ABF'] as const;
 export const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif";

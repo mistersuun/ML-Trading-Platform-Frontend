@@ -9,8 +9,9 @@ import type { Column } from '../components/ui';
 import { HBarList, LineChart } from '../components/charts';
 import { evenIndices } from '../components/charts/scale';
 import { RAMP, SERIES, T } from '../lib/tokens';
-import { int, isNum, pct, shortDate, signedPct, signedUsd, usd, xTickCount } from '../lib/format';
-import { decisionsTitle, equityTitle, etTime, label, limitsTitle, type RiskStatus } from './riskModel';
+import { int, isNum, money, multiple, pct, shortDate, signedPct, signedUsd, usd, xTickCount } from '../lib/format';
+import { accountStatus, decisionsTitle, equityTitle, etTime, label, limitsTitle, type RiskStatus } from './riskModel';
+import { sourceLabel } from './overviewModel';
 
 type S = components['schemas'];
 type Decision = S['DecisionRow'];
@@ -167,6 +168,27 @@ function EquityPanel({ r }: { r: RiskStatus }) {
   );
 }
 
+function AccountPanel({ a }: { a: NonNullable<RiskStatus['account']> }) {
+  const ccy = a.base_currency;
+  if (a.available === false) {
+    return <Panel flex="1 1 300px" title="Account (IBKR)"><EmptyState height={96}>{a.note ?? 'No account snapshot yet. Run the IBKR sync.'}</EmptyState></Panel>;
+  }
+  const st = accountStatus(a);
+  return (
+    <Panel flex="1 1 300px" title="Account (IBKR)" subtitle={sourceLabel(a.source, a.as_of)}>
+      <KeyValueList items={[
+        { label: 'Status', value: <Status kind={st.kind}>{st.word}</Status> },
+        { label: 'Net liquidation', value: money(a.net_worth, ccy, 0) },
+        { label: 'Margin loan', value: isNum(a.margin_loan) && a.margin_loan > 0 ? `−${money(a.margin_loan, ccy, 0)}` : money(0, ccy, 0) },
+        { label: 'Leverage', value: multiple(a.leverage) },
+        { label: 'Excess liquidity', value: money(a.margin_headroom, ccy, 0) },
+        { label: 'Maintenance margin', value: money(a.maint_margin, ccy, 0) },
+      ]} />
+      {(a.warnings ?? []).map((w) => <div key={w} style={{ ...sub, marginTop: 6 }}>{w}</div>)}
+    </Panel>
+  );
+}
+
 function LimitsPanel({ limits }: { limits: Limit[] }) {
   return (
     <Panel flex="1 1 380px" title={limitsTitle(limits)} subtitle="Used vs maximum">
@@ -271,6 +293,7 @@ export default function Risk() {
           <Panel flex="2 1 420px" style={{ display: 'flex', alignItems: 'flex-start' }}>
             {r ? <HeroPanel r={r} /> : pending ? <Loading what="sleeve value" /> : gap}
           </Panel>
+          {r?.account && <AccountPanel a={r.account} />}
           {r ? <SwitchesPanel r={r} /> : <Panel flex="1 1 300px" title="Safety switches">{pending ? <Loading what="switches" /> : gap}</Panel>}
         </section>
         {r ? <EquityPanel r={r} /> : <Panel title="Sleeve value and risk cuts">{pending ? <Loading what="chart" height={220} /> : gap}</Panel>}

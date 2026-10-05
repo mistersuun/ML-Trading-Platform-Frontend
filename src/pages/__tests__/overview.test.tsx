@@ -5,9 +5,9 @@ import { MemoryRouter } from 'react-router-dom'
 import { http, HttpResponse } from 'msw'
 import { renderWithClient } from '../../test/utils'
 import { server } from '../../test/server'
-import { overviewFixture, riskFixture, funnelFixture, proposalFixture, nightly } from '../../test/handlers'
+import { overviewFixture, unleveredOverviewFixture, riskFixture, funnelFixture, proposalFixture, nightly } from '../../test/handlers'
 import Overview from '../Overview'
-import { allocationTitle, funnelTitle, performanceTitle, rangeLabel, riskTitle } from '../overviewModel'
+import { groupValues, groupValueRows, otherLine, cashAvailable, isOverLeveraged, leverageWarningText, profileLabel, sourceLabel, wipeoutFall, allocationTitle, funnelTitle, performanceTitle, rangeLabel, riskTitle } from '../overviewModel'
 
 const render = () => renderWithClient(<MemoryRouter><Overview /></MemoryRouter>)
 const err = (status: number, code: string, message: string) =>
@@ -19,10 +19,13 @@ describe('Overview data', () => {
   it('renders the hero value formatted and the day change', async () => {
     useScan()
     render()
-    expect(await screen.findByText('$124,380.52')).toBeInTheDocument()
-    expect(screen.getByText(/\+\$612\.40 \(\+0\.49%\)/)).toBeInTheDocument()
-    expect(screen.getByText('Cash available').nextSibling).toHaveTextContent('$4,560')
-    expect(screen.getByText('Core portfolio · IBKR')).toBeInTheDocument()
+    expect(await screen.findByText('CA$100,000.00')).toBeInTheDocument()
+    expect(screen.getByText(/\+CA\$612\.40 \(\+0\.49%\)/)).toBeInTheDocument()
+    expect(screen.getByText('Net worth')).toBeInTheDocument()
+    // a negative cash balance is the margin loan (breakdown row), not 'available' cash
+    expect(screen.getByText('Cash available').nextSibling).toHaveTextContent('CA$0')
+    expect(screen.getByText('Cash available').nextSibling).not.toHaveTextContent('−')
+    expect(screen.getAllByText('US equity').length).toBeGreaterThan(0)
     expect(screen.getByText(/\$9,860 \(not real money\)/)).toBeInTheDocument()
   })
 
@@ -94,7 +97,7 @@ describe('Overview states', () => {
     expect(alert).toHaveTextContent('boom')
     fail = false
     await userEvent.click(within(alert).getByRole('button', { name: 'Retry' }))
-    expect(await screen.findByText('$124,380.52')).toBeInTheDocument()
+    expect(await screen.findByText('CA$100,000.00')).toBeInTheDocument()
   })
 
   it('errors in the risk and scan panels stay in those panels', async () => {
@@ -103,7 +106,7 @@ describe('Overview states', () => {
       http.get('*/api/results/technical/latest', () => err(500, 'internal', 'scan down')),
     )
     render()
-    expect(await screen.findByText('$124,380.52')).toBeInTheDocument()
+    expect(await screen.findByText('CA$100,000.00')).toBeInTheDocument()
     await waitFor(() => expect(screen.getAllByRole('alert')).toHaveLength(2))
     expect(screen.getByText('risk down')).toBeInTheDocument()
     expect(screen.getByText('scan down')).toBeInTheDocument()
@@ -143,7 +146,7 @@ describe('Overview interactions', () => {
       return HttpResponse.json({ ...overviewFixture, range: r })
     }))
     render()
-    await screen.findByText('$124,380.52')
+    await screen.findByText('CA$100,000.00')
     const group = screen.getByRole('group', { name: 'Range' })
     expect(within(group).getByRole('button', { name: '1Y' })).toHaveAttribute('aria-pressed', 'true')
     await userEvent.click(within(group).getByRole('button', { name: 'All' }))
@@ -175,7 +178,7 @@ describe('Overview interactions', () => {
 
   it('hovering the growth chart shows both values in a tooltip', async () => {
     render()
-    await screen.findByText('$124,380.52')
+    await screen.findByText('CA$100,000.00')
     const chart = screen.getByRole('figure', { name: /Growth of \$100/ })
     const surface = within(chart).getByTestId('hover-surface')
     surface.getBoundingClientRect = () => ({ left: 0, width: 300, top: 0, height: 240, right: 300, bottom: 240, x: 0, y: 0, toJSON: () => ({}) })
@@ -214,5 +217,119 @@ describe('title helpers', () => {
     expect(riskTitle({ ...riskFixture, drawdown: 0 } as never)).toBe('Signal sleeve is at its peak; trading halts at 10%')
     expect(riskTitle({ ...riskFixture, drawdown: null } as never)).toBe('The signal sleeve has no equity reading yet')
     expect(riskTitle({ ...riskFixture, kill_switch: true } as never)).toMatch(/kill switch/)
+  })
+})
+
+describe('Overview account (net worth, margin, leverage)', () => {
+  it('hero is net worth in CA$ with the breakdown row, leverage meter and factual warning', async () => {
+    useScan()
+    render()
+    await screen.findByText('CA$100,000.00')
+    expect(screen.getByTestId('net-breakdown')).toHaveTextContent('Positions CA$157,000 · Margin loan −CA$57,000 · Net CA$100,000')
+    const meter = screen.getByRole('meter', { name: 'Leverage' })
+    expect(meter).toHaveAttribute('aria-valuenow', '1.57')
+    expect(meter.parentElement).toHaveTextContent('1.57x')
+    expect(screen.getByTestId('leverage-warning')).toHaveTextContent(
+      'You are borrowing CA$57,000 on margin (1.57x). A 64% fall in your holdings would wipe out your equity.')
+    // the backend's own leverage sentence is not repeated in the generic banner
+    expect(screen.queryByText(/Leverage 1\.57x is above/)).not.toBeInTheDocument()
+    expect(screen.getByText(/not converted to CAD/)).toBeInTheDocument()
+  })
+
+  it('"Where the money is" lists groups with values and the snapshot source label', async () => {
+    useScan()
+    render()
+    await screen.findByText('CA$100,000.00')
+    expect(screen.getByText('Where the money is')).toBeInTheDocument()
+    // 0.379 * 157,000 = 59,503
+    const where = screen.getByRole('region', { name: 'Where the money is' })
+    expect(within(where).getByText('US equity').parentElement).toHaveTextContent('CA$59,503')
+    expect(screen.getByTestId('source-label')).toHaveTextContent('IBKR snapshot as of 2026-09-30 20:05 UTC')
+  })
+
+  it('group values come from the backend, with an Unclassified row so they add up to positions', async () => {
+    useScan()
+    const groups = [
+      { key: 'us_equity', label: 'US equity', target: 0.3, now: 0.6, drift: 0.3, value: 40000 },
+      { key: 'canadian_equity', label: 'Canadian equity', target: 0.1, now: 0.4, drift: 0.3, value: 27000 },
+    ]
+    server.use(http.get('*/api/portfolio/overview', () => HttpResponse.json({
+      ...overviewFixture, allocation: groups, unclassified_value: 25000, positions_value: 92000, other_value: 1234.4 })))
+    render()
+    await screen.findByText('CA$100,000.00')
+    const where = screen.getByRole('region', { name: 'Where the money is' })
+    expect(within(where).getByText('US equity').parentElement).toHaveTextContent('CA$40,000')       // not 0.6 x 92,000
+    expect(within(where).getByText('Unclassified').parentElement).toHaveTextContent('CA$25,000')
+    expect(within(where).getByText('Unclassified').parentElement).toHaveTextContent('27%')
+    expect(screen.getByTestId('net-breakdown')).toHaveTextContent('Margin loan −CA$57,000 · Other +CA$1,234 · Net CA$100,000')
+  })
+
+  it('no warning, holdings.csv label and USD when there is no borrowing', async () => {
+    useScan()
+    server.use(http.get('*/api/portfolio/overview', () => HttpResponse.json(unleveredOverviewFixture)))
+    render()
+    expect(await screen.findByText('$124,380.52')).toBeInTheDocument()
+    expect(screen.queryByTestId('leverage-warning')).not.toBeInTheDocument()
+    expect(screen.getByTestId('source-label')).toHaveTextContent('holdings.csv')
+    expect(screen.getByTestId('net-breakdown')).toHaveTextContent('Margin loan $0')
+  })
+
+  it('no warning at exactly the threshold, warning just above it', async () => {
+    useScan()
+    server.use(http.get('*/api/portfolio/overview', () => HttpResponse.json({ ...overviewFixture, leverage: 1.0, margin_loan: 0 })))
+    const first = render()
+    await screen.findByText('CA$100,000.00')
+    expect(screen.queryByTestId('leverage-warning')).not.toBeInTheDocument()
+    first.unmount()
+    server.use(http.get('*/api/portfolio/overview', () => HttpResponse.json({ ...overviewFixture, leverage: 1.01, margin_loan: 1000 })))
+    render()
+    expect(await screen.findByTestId('leverage-warning')).toHaveTextContent('A 99% fall')
+  })
+})
+
+describe('account model', () => {
+  it('wipeout fall is 1 / leverage (equity = G(1-f) - L = 0)', () => {
+    expect(wipeoutFall(1.57)).toBeCloseTo(0.6369, 3)
+    expect(wipeoutFall(2)).toBe(0.5)
+    expect(wipeoutFall(1)).toBe(1)
+    expect(wipeoutFall(0)).toBeNull()
+    expect(wipeoutFall(null)).toBeNull()
+    // cross-check with gross/loan: G = 157,000, L = 57,000 -> f = 1 - L/G
+    expect(wipeoutFall(157000 / 100000)).toBeCloseTo(1 - 57000 / 157000, 10)
+  })
+  it('warning only strictly above the threshold, text computed from the data', () => {
+    expect(isOverLeveraged(1.0)).toBe(false)
+    expect(isOverLeveraged(1.0001)).toBe(true)
+    expect(isOverLeveraged(null)).toBe(false)
+    expect(isOverLeveraged(1.4, 1.5)).toBe(false)
+    expect(leverageWarningText(0.9, 0, 'CAD')).toBeNull()
+    expect(leverageWarningText(1.0, 0, 'CAD')).toBeNull()
+    expect(leverageWarningText(1.57, 57000, 'CAD')).toBe(
+      'You are borrowing CA$57,000 on margin (1.57x). A 64% fall in your holdings would wipe out your equity.')
+    expect(leverageWarningText(2, 50000, 'CAD')).toContain('A 50% fall')
+  })
+  it('source label', () => {
+    expect(sourceLabel('ibkr', '2026-09-30T20:05:00+00:00')).toBe('IBKR snapshot as of 2026-09-30 20:05 UTC')
+    expect(sourceLabel('holdings_csv', null)).toBe('holdings.csv')
+    expect(sourceLabel(undefined, undefined)).toBe('holdings.csv')
+  })
+  it('value rows, other line and cash available', () => {
+    const g = [{ key: 'a', label: 'A', target: 0.5, now: 0.9, drift: 0, value: 30 }, { key: 'b', label: 'B', target: 0.5, now: 0.1, drift: 0, value: 10 }]
+    const rows = groupValueRows(g, 60, 100)!
+    expect(rows.map((r) => [r.label, r.value, r.share])).toEqual([['A', 30, 0.3], ['B', 10, 0.1], ['Unclassified', 60, 0.6]])
+    expect(groupValueRows(g, 0, 100)!.map((r) => r.label)).toEqual(['A', 'B'])
+    expect(groupValueRows(g, null, 100)!.length).toBe(2)
+    expect(groupValueRows([], 5, 100)).toBeNull()
+    expect(groupValueRows([{ key: 'a', label: 'A', target: 0, now: 0.5, drift: 0 }], 0, null)).toBeNull()
+    expect(groupValues(g, 1000)[0].value).toBe(30)                      // the backend value wins over share x positions
+    expect(otherLine(0.2)).toBeNull(); expect(otherLine(-300)).toBe(-300); expect(otherLine(null)).toBeNull()
+    expect(cashAvailable(-57000)).toBe(0); expect(cashAvailable(4560)).toBe(4560); expect(cashAvailable(null)).toBeNull()
+  })
+
+  it('group values and profile label', () => {
+    expect(groupValues([{ key: 'a', label: 'A', target: 0.5, now: 0.25, drift: 0 }], 1000)[0].value).toBe(250)
+    expect(groupValues([{ key: 'a', label: 'A', target: 0.5, now: 0.25, drift: 0 }], null)[0].value).toBeNull()
+    expect(profileLabel('cad')).toBe('CAD profile (D14, approved)')
+    expect(profileLabel('us')).toBe('US profile')
   })
 })

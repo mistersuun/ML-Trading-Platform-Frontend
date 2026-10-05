@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { pct, num, usd, signColor, signedPct, signedUsd, signedNum, int } from '../format'
+import { pct, num, usd, signColor, signedPct, signedUsd, signedNum, int, money, signedMoney, multiple, currencyPrefix } from '../format'
 
 describe('format', () => {
   it('pct renders a fraction as a percentage', () => {
@@ -63,5 +63,28 @@ d2('zero and short dates', () => {
     ex2(shortDate('2026-06-07')).toBe('7 Jun')
     ex2(shortDate('2025-07-01', true)).toBe('Jul 25')
     ex2(shortDate('junk')).toBe('junk')
+  })
+  it('currency prefix: CAD is CA$, USD is $, others get the code', () => {
+    expect(currencyPrefix('CAD')).toBe('CA$')
+    expect(currencyPrefix('cad')).toBe('CA$')
+    expect(currencyPrefix('USD')).toBe('$')
+    expect(currencyPrefix(undefined)).toBe('$')
+    expect(currencyPrefix('EUR')).toBe('EUR ')
+  })
+  it('money formats with the currency prefix and a true minus', () => {
+    expect(money(1234.5, 'CAD')).toBe('CA$1,234.50')
+    expect(money(1234.5, 'USD')).toBe('$1,234.50')
+    expect(money(57000, 'CAD', 0)).toBe('CA$57,000')
+    expect(money(-57000, 'CAD', 0)).toBe('−CA$57,000')
+    expect(money(-0.001, 'CAD', 0)).toBe('CA$0')
+    expect(money(null, 'CAD')).toBe('n/a')
+    expect(signedMoney(612.4, 'CAD')).toBe('+CA$612.40')
+    expect(signedMoney(-612.4, 'CAD')).toBe('−CA$612.40')
+    expect(signedMoney(0, 'CAD')).toBe('CA$0.00')
+  })
+  it('multiple renders leverage', () => {
+    expect(multiple(1.568)).toBe('1.57x')
+    expect(multiple(1, 1)).toBe('1.0x')
+    expect(multiple(null)).toBe('n/a')
   })
 })

@@ -1,5 +1,5 @@
 import type { components } from '../api/schema';
-import { isNum, usd } from '../lib/format';
+import { isNum, money } from '../lib/format';
 
 type S = components['schemas'];
 export type Row = S['ProposalRow'];
@@ -7,13 +7,41 @@ export type Group = S['GroupWeight'];
 export type Trend = S['TrendAsset'];
 export type Proposal = S['ProposalResponse'];
 
+/** Currency of every amount in a proposal: the backend's base_currency (it converts all prices to it, whatever the
+ * profile). Only a response without that field falls back to the profile's usual currency. */
+export const proposalCurrency = (p: { base_currency?: string | null; profile?: string | null }) =>
+  p.base_currency || ((p.profile ?? 'us').toLowerCase() === 'cad' ? 'CAD' : 'USD');
+
+/** Value of the managed positions (what the 'Invested in core + trend' figure shows). total_value is the net value
+ * including unmanaged holdings, so use the managed sleeve when the backend sends it. */
+export function investedManaged(p: Proposal): number {
+  const own = ownCash(p.cash);
+  return isNum(p.managed_value) ? p.managed_value - own : p.total_value - p.cash;
+}
+
+/** Own cash only: a negative balance is the margin loan, which is never allocated to the managed sleeve. */
+export const ownCash = (cash: number | null | undefined): number => (isNum(cash) ? Math.max(cash, 0) : 0);
+
+/** The 'Cash + this contribution' figures and the loan lines: own cash (never negative), the contribution, the margin
+ * loan (shown separately, as a positive amount) and the part of the contribution applied to it. */
+export function cashLines(p: Proposal): { cash: number; contribution: number; loan: number; toLoan: number } {
+  return {
+    cash: ownCash(p.cash),
+    contribution: p.contribution,
+    loan: isNum(p.margin_loan) ? Math.max(p.margin_loan, 0) : Math.max(-(p.cash ?? 0), 0),
+    toLoan: isNum(p.contribution_to_loan) ? Math.max(p.contribution_to_loan, 0) : 0,
+  };
+}
+
 const MINUS = '−';
 export const pts = (fraction: number, digits = 1) => (fraction * 100).toFixed(digits);
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
-/** Weight of a sleeve after its proposed trade, as a fraction of the portfolio after the contribution. */
+/** Weight of a sleeve after its proposed trade, as a fraction of the managed sleeve after the spare contribution
+ * (the part left once the margin loan is repaid). */
 export function weightAfter(r: Row, p: Proposal): number | null {
-  const post = p.total_value + p.contribution;
+  const spare = p.contribution - (isNum(p.contribution_to_loan) ? p.contribution_to_loan : 0);
+  const post = (isNum(p.managed_value) ? p.managed_value : p.total_value) + spare;
   return isNum(post) && post > 0 ? (r.value + r.trade_value) / post : null;
 }
 
@@ -92,7 +120,7 @@ export function tradeSummary(p: Proposal): string {
   const sells = p.trades.filter((t) => t.action === 'sell');
   if (p.trades.length === 0) return 'None';
   const part = (list: typeof buys, w: string) =>
-    list.length ? `${list.length} ${w}${list.length === 1 ? '' : 's'} · ${usd(list.reduce((a, t) => a + t.amount, 0), 0)}` : '';
+    list.length ? `${list.length} ${w}${list.length === 1 ? '' : 's'} · ${money(list.reduce((a, t) => a + t.amount, 0), proposalCurrency(p), 0)}` : '';
   return [part(buys, 'buy'), part(sells, 'sell')].filter(Boolean).join(', ');
 }
 

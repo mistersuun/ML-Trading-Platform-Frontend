@@ -515,6 +515,52 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AccountBlock
+         * @description The owner's broker account (read-only IBKR snapshot) or the holdings.csv fallback, in base currency.
+         *
+         *     margin_loan is the absolute value of negative cash; leverage is gross positions / net liquidation;
+         *     margin_headroom is the broker's excess liquidity (None without a broker snapshot).
+         */
+        AccountBlock: {
+            /** Age Hours */
+            age_hours?: number | null;
+            /** As Of */
+            as_of?: string | null;
+            /**
+             * Available
+             * @default true
+             */
+            available?: boolean;
+            /** Base Currency */
+            base_currency?: string | null;
+            /** Buying Power */
+            buying_power?: number | null;
+            /** Cash */
+            cash?: number | null;
+            /** Leverage */
+            leverage?: number | null;
+            /** Maint Margin */
+            maint_margin?: number | null;
+            /** Margin Headroom */
+            margin_headroom?: number | null;
+            /** Margin Loan */
+            margin_loan?: number | null;
+            /** Max Leverage Warn */
+            max_leverage_warn?: number | null;
+            /** Net Worth */
+            net_worth?: number | null;
+            /** Note */
+            note?: string | null;
+            /** Positions */
+            positions?: number | null;
+            /** Positions Value */
+            positions_value?: number | null;
+            /** Source */
+            source?: string | null;
+            /** Warnings */
+            warnings?: string[];
+        };
         /** AccountValue */
         AccountValue: {
             /** Key */
@@ -845,6 +891,8 @@ export interface components {
             now: number;
             /** Target */
             target: number;
+            /** Value */
+            value?: number | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -1053,6 +1101,7 @@ export interface components {
         };
         /** OverviewResponse */
         OverviewResponse: {
+            account?: components["schemas"]["AccountBlock"] | null;
             /** Accounts */
             accounts: components["schemas"]["AccountValue"][];
             /** Allocation */
@@ -1061,6 +1110,11 @@ export interface components {
             allocation_basis: string;
             /** As Of */
             as_of: string;
+            /**
+             * Base Currency
+             * @default CAD
+             */
+            base_currency?: string;
             /** Benchmark Label */
             benchmark_label: string;
             /** Benchmark Return */
@@ -1071,19 +1125,38 @@ export interface components {
             day_change?: number | null;
             /** Day Change Pct */
             day_change_pct?: number | null;
+            /** Leverage */
+            leverage?: number | null;
+            /** Margin Headroom */
+            margin_headroom?: number | null;
+            /** Margin Loan */
+            margin_loan?: number | null;
             /** Max Drawdown */
             max_drawdown?: number | null;
             /** Method */
             method: string;
+            /** Net Worth */
+            net_worth?: number | null;
+            /** Other Value */
+            other_value?: number | null;
             paper_sleeve: components["schemas"]["PaperSleeve"];
             /** Period Return */
             period_return?: number | null;
+            /** Positions Value */
+            positions_value?: number | null;
             /** Range */
             range: string;
             /** Series */
             series: components["schemas"]["SeriesPoint"][];
+            /**
+             * Source
+             * @default holdings_csv
+             */
+            source?: string;
             /** Total Value */
             total_value: number;
+            /** Unclassified Value */
+            unclassified_value?: number | null;
             /** Unpriced */
             unpriced?: string[];
             /** Warnings */
@@ -1250,18 +1323,38 @@ export interface components {
             advisory: string;
             /** As Of */
             as_of: string;
+            /**
+             * Base Currency
+             * @default CAD
+             */
+            base_currency?: string;
             /** Cash */
             cash: number;
             /** Cash After */
             cash_after: number;
             /** Contribution */
             contribution: number;
+            /** Contribution To Loan */
+            contribution_to_loan?: number | null;
             /** Groups */
             groups: components["schemas"]["GroupWeight"][];
             /** Groups Basis */
             groups_basis: string;
+            /** Leverage */
+            leverage?: number | null;
+            /** Managed Value */
+            managed_value?: number | null;
+            /** Margin Loan */
+            margin_loan?: number | null;
+            /** Margin Loan After */
+            margin_loan_after?: number | null;
             /** Notes */
             notes?: string[];
+            /**
+             * Profile
+             * @default us
+             */
+            profile?: string;
             /** Rows */
             rows: components["schemas"]["ProposalRow"][];
             /** Signal Month */
@@ -1274,6 +1367,8 @@ export interface components {
             trend: components["schemas"]["TrendAsset"][];
             /** Unmanaged */
             unmanaged?: string[];
+            /** Unmanaged Value */
+            unmanaged_value?: number | null;
         };
         /** ProposalRow */
         ProposalRow: {
@@ -1347,6 +1442,7 @@ export interface components {
         };
         /** RiskStatusResponse */
         RiskStatusResponse: {
+            account?: components["schemas"]["AccountBlock"] | null;
             /** Configured Equity */
             configured_equity: number;
             /** Decision Reasons */
