@@ -10,7 +10,8 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorPanel from '../components/ErrorPanel';
 import { T } from '../lib/tokens';
 import { plotlyLayout, plotlyConfig, seriesColor } from '../lib/plotlyTheme';
-import { num, pct, signColor } from '../lib/format';
+import { int, num, pct, signColor } from '../lib/format';
+import { blockHalfLife, blockStatus, blockWindow, exitReasonRows, oosTitle, type PairsWalkForward } from './pairsModel';
 
 
 export default function PairsTrading() {
@@ -32,7 +33,9 @@ export default function PairsTrading() {
 
   const a = analysis;
   const spreadData = ((a?.spread_data ?? []) as unknown as SpreadPoint[]).filter((d) => d.zscore !== undefined);
-  const bt = (a?.backtest ?? null) as PairsBacktest | null;
+  const bt = (a?.backtest ?? null) as (PairsBacktest & PairsWalkForward) | null;
+  const exits = exitReasonRows(bt?.exit_reasons);
+  const blocks = bt?.blocks ?? [];
 
   return (
     <div>
@@ -134,16 +137,65 @@ export default function PairsTrading() {
             </div>
           )}
 
-          {/* Backtest summary */}
+          {/* Backtest summary: out-of-sample walk-forward only */}
           {bt && (
             <div className="panel">
               <h3 className="font-semibold mb-3">Pairs Backtest Results</h3>
+              <p className="mb-3" style={{ color: 'var(--text-2)', fontSize: 13 }}>
+                Out-of-sample walk-forward: each block uses a hedge ratio, half-life and z window fitted on the bars
+                before it, then trades the next block with fixed share counts and next-open fills. Pairs are alert-only.
+              </p>
+              <p className="font-semibold mb-3" data-testid="pairs-oos-title">{oosTitle(bt)}</p>
               <KeyValueList layout="grid" columns={4} items={[
   { label: 'Total Return', value: pct(bt.total_return ?? bt.total_return_pct), color: signColor(bt.total_return ?? bt.total_return_pct) },
   { label: 'Trades', value: bt.total_trades ?? 'n/a' },
   { label: 'Win Rate', value: pct(bt.win_rate) },
   { label: 'Max Drawdown', value: pct(bt.max_drawdown ?? bt.max_drawdown_pct), color: "var(--down)" },
+  ...(bt.psr !== undefined ? [{ label: 'PSR (out of sample)', value: num(bt.psr, 3) }] : []),
+  ...(bt.oos_significant != null ? [{ label: 'Significant', value: bt.oos_significant ? 'YES' : 'NO', color: bt.oos_significant ? 'var(--up)' : 'var(--text-1)' }] : []),
+  ...(bt.latest_block_tradable != null ? [{ label: 'Latest block tradable', value: bt.latest_block_tradable ? 'YES' : 'NO', color: bt.latest_block_tradable ? 'var(--up)' : 'var(--warn)' }] : []),
 ]} />
+              {exits.length > 0 && (
+                <div className="mt-4">
+                  <h4 className="font-semibold mb-2">Why trades ended</h4>
+                  <ul aria-label="Exit reasons" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                    {exits.map(([label, n]) => (
+                      <li key={label} style={{ display: 'flex', justifyContent: 'space-between', maxWidth: 360 }}>
+                        <span>{label}</span><span className="font-mono">{int(n)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {blocks.length > 0 && (
+                <div className="mt-4 overflow-x-auto">
+                  <h4 className="font-semibold mb-2">Out-of-sample blocks</h4>
+                  <table className="w-full text-sm" aria-label="Out-of-sample blocks">
+                    <thead>
+                      <tr style={{ background: 'var(--raised)' }}>
+                        <th className="text-left p-2">Traded</th>
+                        <th className="text-left p-2">Status</th>
+                        <th className="text-right p-2">Fit p-value</th>
+                        <th className="text-right p-2">Half-life</th>
+                        <th className="text-right p-2">Trades</th>
+                        <th className="text-right p-2">Breaks</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {blocks.map((b) => (
+                        <tr key={b.block} className="border-t" style={{ borderColor: 'var(--border)' }}>
+                          <td className="p-2 font-mono text-xs">{blockWindow(b)}</td>
+                          <td className="p-2" style={{ color: b.tradable ? 'var(--up)' : 'var(--text-2)' }}>{blockStatus(b)}</td>
+                          <td className="p-2 text-right font-mono">{num(b.coint_pvalue, 3)}</td>
+                          <td className="p-2 text-right font-mono">{blockHalfLife(b)}</td>
+                          <td className="p-2 text-right font-mono">{b.n_trades ?? 'n/a'}</td>
+                          <td className="p-2 text-right font-mono">{b.n_breaks ?? 'n/a'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
         </>

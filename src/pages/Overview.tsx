@@ -8,7 +8,7 @@ import type { components } from '../api/schema';
 import ErrorPanel from '../components/ErrorPanel';
 import { Hero, Meter, PageHeader, Panel, EmptyState, Status, type Tone } from '../components/ui';
 import { BulletBar, DrawdownChart, HBarList, LineChart, StackedBar } from '../components/charts';
-import { RANGES, allocationTitle, funnelItems, funnelTitle, groupValueRows, otherLine, cashAvailable, leverageThreshold, leverageWarningText, sourceLabel, performanceTitle, rangeLabel, riskTitle, tradesSummary, type Range } from './overviewModel';
+import { RANGES, allocationTitle, funnelFootnote, funnelItems, funnelSurvivors, funnelTitle, groupValueRows, otherLine, cashAvailable, leverageThreshold, leverageWarningText, sourceLabel, performanceTitle, rangeLabel, riskTitle, tradesSummary, type Range } from './overviewModel';
 import { evenIndices } from '../components/charts/scale';
 import { T, SERIES } from '../lib/tokens';
 import { int, isNum, money, multiple, pct, signedMoney, signedNum, signedPct, usd } from '../lib/format';
@@ -294,7 +294,7 @@ function FunnelPanel({ scan }: { scan: ReturnType<typeof useLatestScan> }) {
   }
   const items = funnelItems(funnel);
   return (
-    <Panel flex="1 1 380px" title={funnelTitle(funnel, age)} subtitle={<>Each step keeps only what passed the one before · {health}</>}>
+    <Panel flex="1 1 380px" title={funnelTitle(funnel, age)} subtitle={<>Each step keeps only what passed the one before · {health}{funnelFootnote(funnel) && <> · {funnelFootnote(funnel)}</>}</>}>
       <HBarList ariaLabel="Scan funnel" items={items} max={funnel.tested} colors="ramp" />
     </Panel>
   );
@@ -377,7 +377,7 @@ function FlowPanel({ scan, risk, proposal, overviewFailure, contribution, onCont
   }
   const steps: FlowStep[] = [
     { name: 'Nightly scan', detail: 'every watchlist symbol × every pattern', count: f ? `${int(f.tested)} candidates` : na },
-    { name: 'Validation gates', detail: 'walk-forward, hold-out, null, cost stress', count: f ? `${int(f.bh)} passed` : na },
+    { name: 'Validation gates', detail: 'walk-forward, hold-out, null, cost stress, deflated Sharpe', count: f ? `${int(funnelSurvivors(f))} passed` : na },
     { name: 'Risk checks', detail: 'halt, kill switch, limits, reconcile', count: riskCount },
     { name: 'Order module', detail: 'sizing, duplicates, bracket stop', count: f ? `${int(f.orders)} eligible` : na },
     { name: 'Alpaca paper', detail: 'long-only, no shorts', count: r ? (r.paper_trade_enabled ? 'paper only' : 'paper trading off') : na, color: 'var(--text-2)' },

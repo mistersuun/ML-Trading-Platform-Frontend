@@ -7,7 +7,7 @@ import { renderWithClient } from '../../test/utils'
 import { server } from '../../test/server'
 import { overviewFixture, unleveredOverviewFixture, riskFixture, funnelFixture, proposalFixture, nightly } from '../../test/handlers'
 import Overview from '../Overview'
-import { groupValues, groupValueRows, otherLine, cashAvailable, isOverLeveraged, leverageWarningText, profileLabel, sourceLabel, wipeoutFall, allocationTitle, funnelTitle, performanceTitle, rangeLabel, riskTitle } from '../overviewModel'
+import { groupValues, groupValueRows, otherLine, cashAvailable, isOverLeveraged, leverageWarningText, profileLabel, sourceLabel, wipeoutFall, allocationTitle, funnelTitle, funnelItems, funnelFootnote, performanceTitle, rangeLabel, riskTitle } from '../overviewModel'
 
 const render = () => renderWithClient(<MemoryRouter><Overview /></MemoryRouter>)
 const err = (status: number, code: string, message: string) =>
@@ -46,12 +46,15 @@ describe('Overview data', () => {
   })
 
   it('shows the funnel stages and the signal-to-order flow with the allocation lane', async () => {
-    useScan({ tested: 780, min_trades: 312, oos_positive: 41, psr: 3, bh: 2, orders: 1 })
+    useScan({ tested: 780, min_trades: 312, oos_positive: 41, psr: 3, bh: 2, dsr: 1, orders: 1, n_trials: 780, pbo: 0.55 })
     render()
     const funnel = await screen.findByRole('list', { name: 'Scan funnel' })
     expect(within(funnel).getByText('Candidates tested').parentElement).toHaveTextContent('780')
+    expect(within(funnel).getByText('Beats random entry (BH)').parentElement).toHaveTextContent('2')
+    expect(within(funnel).getByText('Survives deflated Sharpe').parentElement).toHaveTextContent('1')
     expect(within(funnel).getByText('Eligible for an order').parentElement).toHaveTextContent('1')
-    expect(await screen.findByRole('heading', { name: '780 ideas tested tonight, 2 survived every check' })).toBeInTheDocument()
+    expect(screen.getByText(/Deflated against 780 trials · overfitting probability 0\.55 \(advisory, not a gate\)/)).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '780 ideas tested tonight, 1 survived every check' })).toBeInTheDocument()
     const flow = screen.getByRole('list', { name: 'Signal to order' })
     expect(within(flow).getByText('780 candidates')).toBeInTheDocument()
     expect(within(flow).getByText('✓ clear')).toBeInTheDocument()
@@ -210,6 +213,17 @@ describe('title helpers', () => {
     expect(allocationTitle([g('US equity', 0.01), g('Treasuries', -0.012)])).toBe('Allocation is close to target; treasuries is 1 point under')
     expect(allocationTitle([g('US equity', 0.07)])).toBe('Allocation has drifted: US equity is 7 points over target')
     expect(allocationTitle([])).toBe('No allocation to compare with target')
+  })
+  it('a funnel stored before the deflated-Sharpe gate shows no invented stage and counts BH survivors', () => {
+    const old = { tested: 780, min_trades: 312, oos_positive: 41, psr: 3, bh: 2, orders: 0 }
+    expect(funnelItems(old).map((i) => i.label)).not.toContain('Survives deflated Sharpe')
+    expect(funnelTitle(old, 2)).toBe('780 ideas tested tonight, 2 survived every check')
+    expect(funnelFootnote(old)).toBe('')
+    const now = { ...old, dsr: 0, n_trials: 780 }
+    expect(funnelItems(now).map((i) => i.label)).toEqual([
+      'Candidates tested', 'Enough out-of-sample trades', 'Positive out of sample', 'Passes the PSR check',
+      'Beats random entry (BH)', 'Survives deflated Sharpe', 'Eligible for an order'])
+    expect(funnelTitle(now, 2)).toBe('780 ideas tested tonight, none survived every check')
   })
   it('funnelTitle and riskTitle handle edge cases', () => {
     expect(funnelTitle({ ...funnelFixture, tested: 0, min_trades: 0, oos_positive: 0, psr: 0 }, 2)).toBe('No ideas were tested tonight')

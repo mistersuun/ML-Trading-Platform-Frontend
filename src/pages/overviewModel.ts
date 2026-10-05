@@ -54,9 +54,24 @@ export function funnelTitle(f: Funnel, ageHours: number | undefined): string {
   const n = int(f.tested);
   const noun = f.tested === 1 ? 'idea' : 'ideas';
   if (f.tested === 0) return `No ideas were tested ${when}`;
-  return f.bh === 0
+  const survivors = funnelSurvivors(f);
+  return survivors === 0
     ? `${n} ${noun} tested ${when}, none survived every check`
-    : `${n} ${noun} tested ${when}, ${int(f.bh)} survived every check`;
+    : `${n} ${noun} tested ${when}, ${int(survivors)} survived every check`;
+}
+
+/** Candidates that cleared every statistical check: the deflated-Sharpe stage when stored, else the BH stage
+ *  (a funnel stored before the deflated-Sharpe gate existed). */
+export function funnelSurvivors(f: Funnel): number {
+  return isNum(f.dsr) ? f.dsr : f.bh;
+}
+
+/** The run's N (trials the deflated Sharpe corrects for) and its advisory PBO; empty for older funnels. */
+export function funnelFootnote(f: Funnel): string {
+  const parts: string[] = [];
+  if (isNum(f.n_trials) && f.n_trials > 0) parts.push(`Deflated against ${int(f.n_trials)} trials`);
+  if (isNum(f.pbo)) parts.push(`overfitting probability ${f.pbo.toFixed(2)} (advisory, not a gate)`);
+  return parts.join(' · ');
 }
 
 export function riskTitle(r: Risk): string {
@@ -77,7 +92,10 @@ export function tradesSummary(trades: S['ProposalTrade'][]): string {
 export function funnelItems(f: Funnel) {
   const rows: [string, number][] = [
     ['Candidates tested', f.tested], ['Enough out-of-sample trades', f.min_trades], ['Positive out of sample', f.oos_positive],
-    ['Passes the PSR check', f.psr], ['Beats random entry (BH)', f.bh], ['Eligible for an order', f.orders],
+    ['Passes the PSR check', f.psr], ['Beats random entry (BH)', f.bh],
+    // absent for a funnel stored before the deflated-Sharpe gate: no stage is invented
+    ...(isNum(f.dsr) ? ([['Survives deflated Sharpe', f.dsr]] as [string, number][]) : []),
+    ['Eligible for an order', f.orders],
   ];
   return rows.map(([label, value]) => ({ label, value, display: int(value) }));
 }

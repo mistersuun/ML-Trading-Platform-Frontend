@@ -36,7 +36,16 @@ export const pairAnalysis = {
   spread_data: dates.map((date, i) => ({ date, spread: i, zscore: i - 1 })),
   prices_a: dates.map((date, i) => ({ date, price: 60 + i })),
   prices_b: dates.map((date, i) => ({ date, price: 170 + i })),
-  backtest: { total_return: 0.08, max_drawdown: -0.12, total_trades: 5, win_rate: 0.6 },
+  backtest: {
+    total_return: 0.08, max_drawdown: -0.12, total_trades: 5, win_rate: 0.6,
+    oos: true, oos_status: 'ok', oos_blocks: 3, oos_blocks_tradable: 2, latest_block_tradable: false, oos_significant: false,
+    psr: 0.71, exit_reasons: { exit: 3, coint_break: 1, time_stop: 1 },
+    blocks: [
+      { block: 0, trade_start: '2025-01-02T00:00:00', trade_end: '2025-04-01T00:00:00', tradable: true, coint_pvalue: 0.012, half_life: 12.3, n_trades: 3, n_breaks: 0 },
+      { block: 1, trade_start: '2025-04-02T00:00:00', trade_end: '2025-07-01T00:00:00', tradable: true, coint_pvalue: 0.03, half_life: 15.1, n_trades: 2, n_breaks: 1 },
+      { block: 2, trade_start: '2025-07-02T00:00:00', trade_end: '2025-09-30T00:00:00', tradable: false, untradable_reason: 'not_cointegrated', coint_pvalue: 0.26, half_life: null, n_trades: 0, n_breaks: 0 },
+    ],
+  },
 }
 
 // Phase 2 convention: ratios are fractions, non-finite -> null
@@ -157,7 +166,7 @@ export const riskFixture = {
   equity_history: [], decision_window_days: 30, decision_total: 0, decision_reasons: [], decisions: [],
 }
 
-export const funnelFixture = { tested: 780, min_trades: 312, oos_positive: 41, psr: 3, bh: 0, orders: 0 }
+export const funnelFixture = { tested: 780, min_trades: 312, oos_positive: 41, psr: 3, bh: 0, dsr: 0, orders: 0, n_trials: 780, pbo: 0.55, sharpe_var: 0.0004, run_id: 'tech-20261002T223000000000' }
 
 export const proposalFixture = {
   advisory: 'Proposals only.', as_of: '2026-09-30', cash: 4560, cash_after: 100, contribution: 0, groups: [],
@@ -237,6 +246,11 @@ export const handlers = [
       metrics: real.ml_metrics,
       equity_curve: equity,
       is_valid: true,
+      n_oos_bars: 300,
+      calibrated: true,
+      model_selected: 'logreg',
+      abstain_reasons: { band: 41, drift: 7 },
+      last_abstain_reason: 'drift',
     })),
   http.post(u('/stress/full'), () =>
     HttpResponse.json({

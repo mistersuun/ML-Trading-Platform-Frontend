@@ -845,14 +845,24 @@ export interface components {
         Funnel: {
             /** Bh */
             bh: number;
+            /** Dsr */
+            dsr?: number | null;
             /** Min Trades */
             min_trades: number;
+            /** N Trials */
+            n_trials?: number | null;
             /** Oos Positive */
             oos_positive: number;
             /** Orders */
             orders: number;
+            /** Pbo */
+            pbo?: number | null;
             /** Psr */
             psr: number;
+            /** Run Id */
+            run_id?: string | null;
+            /** Sharpe Var */
+            sharpe_var?: number | null;
             /** Tested */
             tested: number;
         };
@@ -998,6 +1008,12 @@ export interface components {
         };
         /** MLPredictResponse */
         MLPredictResponse: {
+            /** Abstain Reasons */
+            abstain_reasons?: {
+                [key: string]: number;
+            };
+            /** Calibrated */
+            calibrated?: boolean | null;
             /** Equity Curve */
             equity_curve: components["schemas"]["EquityPoint"][];
             /** Feature Importance */
@@ -1007,6 +1023,8 @@ export interface components {
             importance_basis: string;
             /** Is Valid */
             is_valid: boolean;
+            /** Last Abstain Reason */
+            last_abstain_reason?: string | null;
             /** Metrics */
             metrics: {
                 [key: string]: unknown;
@@ -1015,6 +1033,8 @@ export interface components {
             metrics_display: {
                 [key: string]: unknown;
             };
+            /** Model Selected */
+            model_selected?: string | null;
             /** Model Type */
             model_type?: string | null;
             /** N Oos Bars */
@@ -1064,12 +1084,18 @@ export interface components {
         NightlyRef: {
             /** Bh Adjusted P */
             bh_adjusted_p?: number | null;
+            /** Dsr P */
+            dsr_p?: number | null;
             /** Generated At */
             generated_at?: string | null;
             /** In Last Scan */
             in_last_scan: boolean;
             /** Label */
             label: string;
+            /** N Trials */
+            n_trials?: number | null;
+            /** Pbo */
+            pbo?: number | null;
             /** Tested */
             tested?: number | null;
             /** Validation Status */
@@ -1628,6 +1654,10 @@ export interface components {
             bh_adjusted_p?: number | null;
             /** Days Ago */
             days_ago: number;
+            /** Dsr */
+            dsr?: number | null;
+            /** Dsr P */
+            dsr_p?: number | null;
             /** Holdout */
             holdout?: {
                 [key: string]: unknown;
@@ -1661,6 +1691,8 @@ export interface components {
             orderable_direction?: number;
             /** Pattern */
             pattern: string;
+            /** Pbo */
+            pbo?: number | null;
             /** Price */
             price: number;
             /** Profit Factor */

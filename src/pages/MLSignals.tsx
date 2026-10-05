@@ -9,6 +9,7 @@ import ErrorPanel from '../components/ErrorPanel';
 import type { Metrics } from '../api/types';
 import { plotlyLayout, plotlyConfig, seriesColor } from '../lib/plotlyTheme';
 import { num, pct, usd, signColor } from '../lib/format';
+import { abstainReasonLabel, abstainRows, abstainTitle, calibrationLabel, probabilityHeader } from './mlModel';
 
 
 export default function MLSignals() {
@@ -49,6 +50,28 @@ export default function MLSignals() {
   { label: 'Valid', value: r.is_valid ? 'YES' : 'NO', color: r.is_valid ? 'var(--up)' : 'var(--down)' },
 ]} /></div>
           )}
+
+          {/* Calibration and abstentions */}
+          <div className="panel mb-6" data-testid="ml-calibration">
+            <h3 className="font-semibold mb-3">{abstainTitle(r.abstain_reasons, r.n_oos_bars)}</h3>
+            <KeyValueList layout="grid" columns={3} items={[
+  { label: 'Probability', value: calibrationLabel(r.calibrated), color: r.calibrated ? 'var(--up)' : 'var(--warn)' },
+  { label: 'Model', value: r.model_selected ?? r.model_type ?? 'n/a' },
+  { label: 'Latest bar', value: abstainReasonLabel(r.last_abstain_reason) },
+]} />
+            {abstainRows(r.abstain_reasons).length > 0 && (
+              <ul aria-label="Abstain reasons" className="mt-3" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                {abstainRows(r.abstain_reasons).map(([label, n]) => (
+                  <li key={label} style={{ display: 'flex', justifyContent: 'space-between', maxWidth: 360 }}>
+                    <span>{label}</span><span className="font-mono">{n}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="mt-3" style={{ color: 'var(--text-2)', fontSize: 13 }}>
+              ML signals are alert-only: they are never orders, whatever their probability.
+            </p>
+          </div>
 
           {/* Feature Importance */}
           {r.feature_importance.length > 0 && (
@@ -101,6 +124,7 @@ export default function MLSignals() {
                     <th className="text-left p-2">Date</th>
                     <th className="text-left p-2">Signal</th>
                     <th className="text-right p-2">Price</th>
+                    <th className="text-right p-2">{probabilityHeader(r.calibrated)}</th>
                     <th className="text-right p-2">Confidence</th>
                   </tr>
                 </thead>
@@ -110,6 +134,7 @@ export default function MLSignals() {
                       <td className="p-2 font-mono text-xs">{s.date?.slice(0, 10)}</td>
                       <td className="p-2 font-bold" style={{ color: s.signal === 'BUY' ? 'var(--up)' : 'var(--down)' }}>{s.signal}</td>
                       <td className="p-2 text-right font-mono">{usd(s.price)}</td>
+                      <td className="p-2 text-right">{pct(s.p_up)}</td>
                       <td className="p-2 text-right">{pct(s.confidence)}</td>
                     </tr>
                   ))}

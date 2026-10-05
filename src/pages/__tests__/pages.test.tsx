@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { renderWithClient as render } from '../../test/utils'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
@@ -105,5 +105,34 @@ describe('real backend payloads', () => {
     expect(typeof full.win_rate).toBe('number')
     expect(table.textContent).not.toMatch(/n\/a/)
     expect(table.textContent).toContain(`${(full.win_rate * 100).toFixed(1)}%`)
+  })
+})
+
+describe('Phase 4 pages (D15)', () => {
+  it('PairsTrading shows the out-of-sample walk-forward blocks and exit reasons', async () => {
+    render(<PairsTrading />)
+    await screen.findByRole('option', { name: 'KO / PEP' })
+    await userEvent.click(screen.getByRole('button', { name: /analyze pair/i }))
+    expect(await screen.findByTestId('pairs-oos-title')).toHaveTextContent('2 of 3 out-of-sample blocks were tradable')
+    const exits = screen.getByRole('list', { name: 'Exit reasons' })
+    expect(within(exits).getByText('Spread reverted (z exit)').parentElement).toHaveTextContent('3')
+    expect(within(exits).getByText('Cointegration broke').parentElement).toHaveTextContent('1')
+    expect(within(exits).getByText('Time stop (held too long)')).toBeInTheDocument()
+    const table = screen.getByRole('table', { name: 'Out-of-sample blocks' })
+    expect(within(table).getByText('Skipped (not cointegrated)')).toBeInTheDocument()
+    expect(within(table).getAllByText('Tradable')).toHaveLength(2)
+    expect(screen.getByText(/alert-only/)).toBeInTheDocument()
+  })
+
+  it('MLSignals shows calibrated probability and the abstain reasons', async () => {
+    render(<MLSignals />)
+    await userEvent.click(screen.getByRole('button', { name: /predict|run|train|generate/i }))
+    const panel = await screen.findByTestId('ml-calibration')
+    expect(within(panel).getByText('Calibrated')).toBeInTheDocument()
+    expect(within(panel).getByText('Inputs drifted from the training data', { selector: 'dd' })).toBeInTheDocument()
+    const reasons = within(panel).getByRole('list', { name: 'Abstain reasons' })
+    expect(within(reasons).getByText('Probability inside the no-trade band').parentElement).toHaveTextContent('41')
+    expect(within(panel).getByRole('heading', { name: 'The model abstained on 48 of 300 out-of-sample bars' })).toBeInTheDocument()
+    expect(await screen.findByRole('columnheader', { name: 'Calibrated P(up)' })).toBeInTheDocument()
   })
 })

@@ -91,11 +91,14 @@ function fmtGateValue(g: Gate, v: number | null | undefined): string {
 
 export function gateResult(g: Gate): string {
   if (g.status === 'unavailable') return 'Unavailable';
-  const word = g.status === 'pass' ? 'Pass' : g.status === 'fail' ? 'Fail' : 'Recorded';
+  // PBO is shown for context only: it never gates an order, so it reads 'Advisory', not Pass / Fail
+  const word = g.key === 'pbo' ? 'Advisory' : g.status === 'pass' ? 'Pass' : g.status === 'fail' ? 'Fail' : 'Recorded';
   const v = g.value;
   if (!isNum(v)) return word;
   let detail: string;
   if (g.key === 'bh') detail = `q ${num(v)}`;
+  else if (g.key === 'dsr') detail = `p ${num(v)}${isNum(g.threshold) ? ` ${g.status === 'pass' ? '<' : '>='} ${num(g.threshold)}` : ''}`;
+  else if (g.key === 'pbo') detail = `PBO ${num(v)}`;
   else if (g.unit === 'probability' && isNum(g.threshold) && g.status === 'fail') detail = `${num(v)} ${g.comparator.startsWith('<') ? '>' : '<'} ${num(g.threshold)}`;
   else detail = fmtGateValue(g, v);
   return `${word} · ${detail}`;
