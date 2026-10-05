@@ -1,37 +1,40 @@
-import { useState, useEffect } from 'react';
 import { getConfig } from '../api/client';
 import LoadingSpinner from '../components/LoadingSpinner';
+import ErrorPanel from '../components/ErrorPanel';
+import { useLoad } from '../lib/useAsync';
 
-export default function Settings() {
-  const [config, setConfig] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+const loadConfig = () => getConfig().then((r) => r.data);
 
-  useEffect(() => {
-    getConfig().then((res) => {
-      setConfig(res.data);
-      setLoading(false);
-    }).catch(() => setLoading(false));
-  }, []);
-
-  if (loading) return <LoadingSpinner text="Loading configuration..." />;
-
-  const Section = ({ title, data }: { title: string; data: any }) => (
+function Section({ title, data }: { title: string; data: Record<string, unknown> | undefined }) {
+  const entries = Object.entries(data ?? {});
+  return (
     <div className="rounded-lg mb-4 p-4" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
       <h3 className="font-semibold mb-3">{title}</h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-        {Object.entries(data || {}).map(([key, value]) => (
-          <div key={key} className="flex justify-between text-sm py-1 border-b" style={{ borderColor: 'var(--border)' }}>
-            <span style={{ color: 'var(--text-secondary)' }}>{key.replace(/_/g, ' ')}</span>
-            <span className="font-mono">{typeof value === 'object' ? JSON.stringify(value) : String(value)}</span>
-          </div>
-        ))}
-      </div>
+      {entries.length === 0 ? (
+        <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>No settings.</p>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          {entries.map(([key, value]) => (
+            <div key={key} className="flex justify-between text-sm py-1 border-b" style={{ borderColor: 'var(--border)' }}>
+              <span style={{ color: 'var(--text-secondary)' }}>{key.replace(/_/g, ' ')}</span>
+              <span className="font-mono">{typeof value === 'object' ? JSON.stringify(value) : String(value)}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
+}
+
+export default function Settings() {
+  const { data: config, error, loading, retry } = useLoad(loadConfig);
+
+  if (loading) return <LoadingSpinner text="Loading configuration..." />;
 
   return (
     <div>
       <h2 className="text-2xl font-bold mb-6">Settings</h2>
+      {error && <ErrorPanel error={error} onRetry={retry} />}
       {config && (
         <>
           <Section title="Backtesting" data={config.backtest} />
@@ -39,7 +42,7 @@ export default function Settings() {
           <Section title="Risk Management" data={config.risk} />
           <Section title="ML Configuration" data={config.ml} />
           <Section title="Watchlist" data={Object.fromEntries(
-            Object.entries(config.watchlist || {}).map(([k, v]) => [k, (v as string[]).join(', ')])
+            Object.entries(config.watchlist ?? {}).map(([k, v]) => [k, (v as string[]).join(', ')])
           )} />
         </>
       )}

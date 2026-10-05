@@ -1,35 +1,27 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Plot from 'react-plotly.js';
 import { getConfiguredPairs, analyzePair } from '../api/client';
 import MetricCard from '../components/MetricCard';
 import LoadingSpinner from '../components/LoadingSpinner';
+import ErrorPanel from '../components/ErrorPanel';
+import { useAction, useLoad } from '../lib/useAsync';
+import { num, pct, signColor } from '../lib/format';
+
+type Pair = { a: string; b: string };
+const loadPairs = () => getConfiguredPairs().then((r) => (r.data.pairs ?? []) as Pair[]);
+const analyze = (a: string, b: string) => analyzePair(a, b).then((r) => r.data);
 
 export default function PairsTrading() {
-  const [pairs, setPairs] = useState<{ a: string; b: string }[]>([]);
-  const [selectedPair, setSelectedPair] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [analysis, setAnalysis] = useState<any>(null);
+  const { data: pairsData, error: pairsError, loading: pairsLoading, retry: retryPairs } = useLoad(loadPairs);
+  const pairs = pairsData ?? [];
+  const [chosenPair, setChosenPair] = useState('');
+  const selectedPair = chosenPair || (pairs.length > 0 ? `${pairs[0].a}/${pairs[0].b}` : '');
+  const { data: analysis, error, loading, run, retry } = useAction(analyze);
 
-  useEffect(() => {
-    getConfiguredPairs().then((res) => {
-      const p = res.data.pairs || [];
-      setPairs(p);
-      if (p.length > 0) setSelectedPair(`${p[0].a}/${p[0].b}`);
-    });
-  }, []);
-
-  const handleAnalyze = async () => {
+  const handleAnalyze = () => {
     const [a, b] = selectedPair.split('/');
     if (!a || !b) return;
-    setLoading(true);
-    try {
-      const res = await analyzePair(a, b);
-      setAnalysis(res.data);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
+    void run(a, b);
   };
 
   const a = analysis;
@@ -42,7 +34,7 @@ export default function PairsTrading() {
       <div className="flex gap-3 mb-6">
         <select
           value={selectedPair}
-          onChange={(e) => setSelectedPair(e.target.value)}
+          onChange={(e) => setChosenPair(e.target.value)}
           className="px-3 py-2 rounded text-sm"
           style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
         >
@@ -50,14 +42,21 @@ export default function PairsTrading() {
             <option key={`${p.a}/${p.b}`} value={`${p.a}/${p.b}`}>{p.a} / {p.b}</option>
           ))}
         </select>
-        <button onClick={handleAnalyze} disabled={loading}
+        <button onClick={handleAnalyze} disabled={loading || !selectedPair}
           className="px-6 py-2 rounded font-semibold text-black disabled:opacity-50"
           style={{ background: 'var(--accent-blue)' }}>
           {loading ? 'Analyzing...' : 'Analyze Pair'}
         </button>
       </div>
 
+      {pairsLoading && <LoadingSpinner text="Loading configured pairs..." />}
+      {pairsError && <ErrorPanel error={pairsError} onRetry={retryPairs} />}
+      {!pairsLoading && !pairsError && pairs.length === 0 && (
+        <p className="mb-6" style={{ color: 'var(--text-secondary)' }}>No pairs are configured.</p>
+      )}
+
       {loading && <LoadingSpinner text="Running cointegration analysis..." />}
+      {error && !loading && <ErrorPanel error={error} onRetry={retry} />}
 
       {a && !loading && (
         <>
@@ -65,12 +64,12 @@ export default function PairsTrading() {
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-6">
             <MetricCard label="Cointegrated" value={a.is_cointegrated ? 'YES' : 'NO'}
               color={a.is_cointegrated ? 'var(--accent-green)' : 'var(--accent-red)'} />
-            <MetricCard label="P-Value" value={a.coint_pvalue?.toFixed(4)}
-              color={a.coint_pvalue < 0.05 ? 'var(--accent-green)' : 'var(--accent-red)'} />
-            <MetricCard label="Hedge Ratio" value={a.hedge_ratio?.toFixed(4)} />
-            <MetricCard label="Half-Life" value={`${a.half_life?.toFixed(1)} days`} />
-            <MetricCard label="Correlation" value={a.correlation?.toFixed(4)} />
-            <MetricCard label="Current Z-Score" value={a.current_zscore?.toFixed(2)}
+            <MetricCard label="P-Value" value={num(a.coint_pvalue, 4)}
+              color={a.coint_pvalue != null && a.coint_pvalue < 0.05 ? 'var(--accent-green)' : 'var(--accent-red)'} />
+            <MetricCard label="Hedge Ratio" value={num(a.hedge_ratio, 4)} />
+            <MetricCard label="Half-Life" value={a.half_life == null ? 'n/a' : `${num(a.half_life, 1)} days`} />
+            <MetricCard label="Correlation" value={num(a.correlation, 4)} />
+            <MetricCard label="Current Z-Score" value={num(a.current_zscore)}
               color={Math.abs(a.current_zscore) > 2 ? 'var(--accent-yellow)' : 'var(--text-primary)'} />
           </div>
 
@@ -152,11 +151,11 @@ export default function PairsTrading() {
             <div className="rounded-lg p-4" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
               <h3 className="font-semibold mb-3">Pairs Backtest Results</h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <MetricCard label="Total Return" value={`${(a.backtest.total_return_pct || 0).toFixed(1)}%`}
-                  color={(a.backtest.total_return_pct || 0) >= 0 ? 'var(--accent-green)' : 'var(--accent-red)'} />
-                <MetricCard label="Trades" value={a.backtest.total_trades || 0} />
-                <MetricCard label="Win Rate" value={`${((a.backtest.win_rate || 0) * 100).toFixed(1)}%`} />
-                <MetricCard label="Max Drawdown" value={`${((a.backtest.max_drawdown_pct || 0) * 100).toFixed(1)}%`} color="var(--accent-red)" />
+                <MetricCard label="Total Return" value={pct(a.backtest.total_return ?? a.backtest.total_return_pct)}
+                  color={signColor(a.backtest.total_return ?? a.backtest.total_return_pct)} />
+                <MetricCard label="Trades" value={a.backtest.total_trades ?? 'n/a'} />
+                <MetricCard label="Win Rate" value={pct(a.backtest.win_rate)} />
+                <MetricCard label="Max Drawdown" value={pct(a.backtest.max_drawdown ?? a.backtest.max_drawdown_pct)} color="var(--accent-red)" />
               </div>
             </div>
           )}

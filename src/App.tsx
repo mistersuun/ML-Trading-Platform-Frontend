@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, NavLink, useLocation } from 'react-router-dom';
+import ErrorBoundary from './components/ErrorBoundary';
 import Dashboard from './pages/Dashboard';
 import TechnicalScanner from './pages/TechnicalScanner';
 import PairsTrading from './pages/PairsTrading';
@@ -14,6 +15,22 @@ const navItems = [
   { to: '/stress', label: 'Stress Test Lab', icon: '🔬' },
   { to: '/settings', label: 'Settings', icon: '⚙️' },
 ];
+
+function RoutedPages() {
+  const { pathname } = useLocation();
+  return (
+    <ErrorBoundary resetKey={pathname}>
+      <Routes>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/scanner" element={<TechnicalScanner />} />
+        <Route path="/pairs" element={<PairsTrading />} />
+        <Route path="/ml" element={<MLSignals />} />
+        <Route path="/stress" element={<StressTestLab />} />
+        <Route path="/settings" element={<Settings />} />
+      </Routes>
+    </ErrorBoundary>
+  );
+}
 
 export default function App() {
   return (
@@ -53,14 +70,7 @@ export default function App() {
 
         {/* Main content */}
         <main className="flex-1 overflow-auto p-6" style={{ background: 'var(--bg-primary)' }}>
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/scanner" element={<TechnicalScanner />} />
-            <Route path="/pairs" element={<PairsTrading />} />
-            <Route path="/ml" element={<MLSignals />} />
-            <Route path="/stress" element={<StressTestLab />} />
-            <Route path="/settings" element={<Settings />} />
-          </Routes>
+          <RoutedPages />
         </main>
       </div>
     </BrowserRouter>

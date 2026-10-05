@@ -9,6 +9,7 @@ import PairsTrading from '../PairsTrading'
 import MLSignals from '../MLSignals'
 import StressTestLab from '../StressTestLab'
 import Settings from '../Settings'
+import real from '../../test/fixtures/backend-real.json'
 
 describe('smoke', () => {
   it('Dashboard renders and shows scan results', async () => {
@@ -58,7 +59,7 @@ describe('smoke', () => {
 
 describe('bug pinning', () => {
   // FE-1: backend sends total_return_pct as a fraction (0.153); Dashboard prints it without *100
-  it.fails('FE-1 Dashboard shows 15.3% for total_return_pct 0.153', async () => {
+  it('FE-1 Dashboard shows 15.3% for total_return_pct 0.153', async () => {
     render(<Dashboard />)
     await userEvent.click(screen.getByRole('button', { name: /run full scan/i }))
     await screen.findByText('AAPL')
@@ -66,7 +67,7 @@ describe('bug pinning', () => {
   })
 
   // FE-2: backtest sends total_return / max_drawdown; frontend reads *_pct keys
-  it.fails('FE-2 PairsTrading backtest cards show 8.0% and -12.0%', async () => {
+  it('FE-2 PairsTrading backtest cards show 8.0% and -12.0%', async () => {
     render(<PairsTrading />)
     await screen.findByRole('option', { name: 'KO / PEP' })
     await userEvent.click(screen.getByRole('button', { name: /analyze pair/i }))
@@ -76,7 +77,7 @@ describe('bug pinning', () => {
   })
 
   // FE-3: failures are only console.error'd; no visible message
-  it.fails('FE-3a Dashboard shows a visible error on HTTP 500', async () => {
+  it('FE-3a Dashboard shows a visible error on HTTP 500', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     server.use(http.post('*/api/patterns/scan', () => HttpResponse.json({ detail: 'boom' }, { status: 500 })))
     render(<Dashboard />)
@@ -84,10 +85,24 @@ describe('bug pinning', () => {
     expect(await screen.findByRole('alert', {}, { timeout: 500 })).toBeInTheDocument()
   })
 
-  it.fails('FE-3b Dashboard shows a visible error on 200 {error}', async () => {
+  it('FE-3b Dashboard shows a visible error on 200 {error}', async () => {
     server.use(http.post('*/api/patterns/scan', () => HttpResponse.json({ error: 'No data for AAPL' })))
     render(<Dashboard />)
     await userEvent.click(screen.getByRole('button', { name: /run full scan/i }))
     expect(await screen.findByText(/No data for AAPL/, {}, { timeout: 500 })).toBeInTheDocument()
+  })
+})
+
+describe('real backend payloads', () => {
+  // The /stress/full fixture comes from the backend itself: regime cells must show numbers, never "n/a"
+  it('StressTestLab regime table shows real percentages from the backend payload', async () => {
+    render(<StressTestLab />)
+    await screen.findByRole('option', { name: 'golden_cross' })
+    await userEvent.click(screen.getByRole('button', { name: /run/i }))
+    const table = (await screen.findByText('Regime Performance')).closest('div') as HTMLElement
+    const full = real.stress_regimes.full_period
+    expect(typeof full.win_rate).toBe('number')
+    expect(table.textContent).not.toMatch(/n\/a/)
+    expect(table.textContent).toContain(`${(full.win_rate * 100).toFixed(1)}%`)
   })
 })

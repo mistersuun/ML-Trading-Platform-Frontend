@@ -14,9 +14,7 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      # 5 pre-existing react-hooks/static-components errors in src/pages/Settings.tsx; make blocking once fixed
       - run: npm run lint
-        continue-on-error: true
       - run: npm run typecheck
       - run: npm test
       - run: npm run build

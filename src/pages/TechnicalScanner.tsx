@@ -1,42 +1,36 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Plot from 'react-plotly.js';
 import { fetchOHLCV, listPatterns, detectPattern, runBacktest } from '../api/client';
 import MetricCard from '../components/MetricCard';
 import LoadingSpinner from '../components/LoadingSpinner';
+import ErrorPanel from '../components/ErrorPanel';
+import { useAction, useLoad } from '../lib/useAsync';
+import { num, pct, signColor } from '../lib/format';
+
+const loadPatterns = () => listPatterns().then((r) => (r.data.patterns ?? []) as string[]);
+const analyzeSymbol = async (symbol: string, pattern: string) => {
+  const [dataRes, sigRes, btRes] = await Promise.all([
+    fetchOHLCV(symbol),
+    detectPattern(symbol, pattern),
+    runBacktest(symbol, pattern),
+  ]);
+  return { ohlcv: (dataRes.data.data ?? []) as any[], signals: sigRes.data as any, backtest: btRes.data as any };
+};
 
 export default function TechnicalScanner() {
-  const [patterns, setPatterns] = useState<string[]>([]);
+  const { data: patternsData, error: patError, loading: patLoading, retry: retryPatterns } = useLoad(loadPatterns);
+  const patterns = patternsData ?? [];
   const [symbol, setSymbol] = useState('AAPL');
-  const [pattern, setPattern] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [ohlcv, setOhlcv] = useState<any[]>([]);
-  const [signals, setSignals] = useState<any>(null);
-  const [backtest, setBacktest] = useState<any>(null);
+  const [chosenPattern, setChosenPattern] = useState('');
+  const pattern = chosenPattern || patterns[0] || '';
+  const { data: result, error, loading, run, retry } = useAction(analyzeSymbol);
+  const ohlcv = result?.ohlcv ?? [];
+  const signals = result?.signals ?? null;
+  const backtest = result?.backtest ?? null;
 
-  useEffect(() => {
-    listPatterns().then((res) => {
-      setPatterns(res.data.patterns);
-      if (res.data.patterns.length > 0) setPattern(res.data.patterns[0]);
-    });
-  }, []);
-
-  const handleAnalyze = async () => {
+  const handleAnalyze = () => {
     if (!symbol || !pattern) return;
-    setLoading(true);
-    try {
-      const [dataRes, sigRes, btRes] = await Promise.all([
-        fetchOHLCV(symbol),
-        detectPattern(symbol, pattern),
-        runBacktest(symbol, pattern),
-      ]);
-      setOhlcv(dataRes.data.data || []);
-      setSignals(sigRes.data);
-      setBacktest(btRes.data);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
+    void run(symbol, pattern);
   };
 
   const m = backtest?.metrics;
@@ -56,7 +50,7 @@ export default function TechnicalScanner() {
         />
         <select
           value={pattern}
-          onChange={(e) => setPattern(e.target.value)}
+          onChange={(e) => setChosenPattern(e.target.value)}
           className="px-3 py-2 rounded text-sm"
           style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
         >
@@ -64,7 +58,7 @@ export default function TechnicalScanner() {
         </select>
         <button
           onClick={handleAnalyze}
-          disabled={loading}
+          disabled={loading || !pattern}
           className="px-6 py-2 rounded font-semibold text-black disabled:opacity-50"
           style={{ background: 'var(--accent-blue)' }}
         >
@@ -72,7 +66,15 @@ export default function TechnicalScanner() {
         </button>
       </div>
 
+      {patLoading && <LoadingSpinner text="Loading patterns..." />}
+      {patError && <ErrorPanel error={patError} onRetry={retryPatterns} />}
+      {error && !loading && <ErrorPanel error={error} onRetry={retry} />}
+
       {loading && <LoadingSpinner text="Fetching data, detecting patterns, running backtest..." />}
+
+      {result && ohlcv.length === 0 && !loading && (
+        <p style={{ color: 'var(--text-secondary)' }}>No price data returned for {symbol}.</p>
+      )}
 
       {ohlcv.length > 0 && !loading && (
         <>
@@ -128,12 +130,12 @@ export default function TechnicalScanner() {
           {/* Metrics */}
           {m && (
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-6">
-              <MetricCard label="Win Rate" value={m.win_rate} color={parseFloat(m.win_rate) >= 52 ? 'var(--accent-green)' : 'var(--accent-red)'} />
-              <MetricCard label="Profit Factor" value={m.profit_factor} />
-              <MetricCard label="Sharpe" value={m.sharpe} />
-              <MetricCard label="Total Return" value={m.total_return} color={parseFloat(m.total_return) >= 0 ? 'var(--accent-green)' : 'var(--accent-red)'} />
-              <MetricCard label="Max Drawdown" value={m.max_drawdown} color="var(--accent-red)" />
-              <MetricCard label="Trades" value={m.total_trades} />
+              <MetricCard label="Win Rate" value={pct(m.win_rate)} color={m.win_rate != null && m.win_rate >= 0.52 ? 'var(--accent-green)' : 'var(--accent-red)'} />
+              <MetricCard label="Profit Factor" value={num(m.profit_factor)} />
+              <MetricCard label="Sharpe" value={num(m.sharpe)} />
+              <MetricCard label="Total Return" value={pct(m.total_return)} color={signColor(m.total_return)} />
+              <MetricCard label="Max Drawdown" value={pct(m.max_drawdown)} color="var(--accent-red)" />
+              <MetricCard label="Trades" value={m.total_trades ?? 'n/a'} />
             </div>
           )}
 
@@ -187,10 +189,10 @@ export default function TechnicalScanner() {
                       <td className="p-2 font-mono text-xs">{t.entry_date?.slice(0, 10)}</td>
                       <td className="p-2 font-mono text-xs">{t.exit_date?.slice(0, 10)}</td>
                       <td className="p-2" style={{ color: t.direction === 'LONG' ? 'var(--accent-green)' : 'var(--accent-red)' }}>{t.direction}</td>
-                      <td className="p-2 text-right font-mono">{t.entry_price?.toFixed(2)}</td>
-                      <td className="p-2 text-right font-mono">{t.exit_price?.toFixed(2)}</td>
-                      <td className="p-2 text-right font-mono" style={{ color: t.pnl_pct >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
-                        {(t.pnl_pct * 100).toFixed(2)}%
+                      <td className="p-2 text-right font-mono">{num(t.entry_price)}</td>
+                      <td className="p-2 text-right font-mono">{num(t.exit_price)}</td>
+                      <td className="p-2 text-right font-mono" style={{ color: signColor(t.pnl_pct) }}>
+                        {pct(t.pnl_pct, 2)}
                       </td>
                       <td className="p-2 text-xs" style={{ color: 'var(--text-secondary)' }}>{t.exit_reason}</td>
                     </tr>

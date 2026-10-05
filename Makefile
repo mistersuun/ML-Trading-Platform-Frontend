@@ -1,9 +1,8 @@
 .PHONY: check
-# Same steps as .github/workflows/ci.yml. Lint has 5 pre-existing app errors (Settings.tsx), so it is non-blocking
-# here as in CI; remove the leading '-' once they are fixed.
+# Same steps as .github/workflows/ci.yml (lint is blocking).
 check:
 	npm ci
-	-npm run lint
+	npm run lint
 	npm run typecheck
 	npm test
 	npm run build
