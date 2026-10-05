@@ -10,6 +10,7 @@ vi.mock('react-plotly.js', () => ({
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
 afterEach(() => {
+  window.history.pushState({}, '', '/')
   cleanup()
   server.resetHandlers()
 })

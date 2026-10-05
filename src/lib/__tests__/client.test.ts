@@ -33,6 +33,6 @@ describe('api client interceptor', () => {
   })
   it('passes through normal responses', async () => {
     const res = await listPatterns()
-    expect(res.data.patterns.length).toBeGreaterThan(0)
+    expect(res.patterns.length).toBeGreaterThan(0)
   })
 })

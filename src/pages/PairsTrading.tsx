@@ -1,31 +1,35 @@
 import { useState } from 'react';
 import Plot from 'react-plotly.js';
-import { getConfiguredPairs, analyzePair } from '../api/client';
+import { useMutation } from '@tanstack/react-query';
+import { analyzePair } from '../api/client';
+import { usePairs } from '../api/hooks';
+import type { PairsBacktest, SpreadPoint } from '../api/types';
 import MetricCard from '../components/MetricCard';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorPanel from '../components/ErrorPanel';
-import { useAction, useLoad } from '../lib/useAsync';
 import { num, pct, signColor } from '../lib/format';
 
-type Pair = { a: string; b: string };
-const loadPairs = () => getConfiguredPairs().then((r) => (r.data.pairs ?? []) as Pair[]);
-const analyze = (a: string, b: string) => analyzePair(a, b).then((r) => r.data);
 
 export default function PairsTrading() {
-  const { data: pairsData, error: pairsError, loading: pairsLoading, retry: retryPairs } = useLoad(loadPairs);
-  const pairs = pairsData ?? [];
+  const { data: pairsData, error: pairsError, isPending: pairsLoading, refetch: refetchPairs } = usePairs();
+  const retryPairs = () => void refetchPairs();
+  const pairs = pairsData?.pairs ?? [];
   const [chosenPair, setChosenPair] = useState('');
   const selectedPair = chosenPair || (pairs.length > 0 ? `${pairs[0].a}/${pairs[0].b}` : '');
-  const { data: analysis, error, loading, run, retry } = useAction(analyze);
+  const mutation = useMutation({ mutationFn: ({ a, b }: { a: string; b: string }) => analyzePair(a, b) });
+  const { data: analysis, error, isPending: loading } = mutation;
+  const retry = () => { if (mutation.variables) mutation.mutate(mutation.variables); };
 
   const handleAnalyze = () => {
     const [a, b] = selectedPair.split('/');
     if (!a || !b) return;
-    void run(a, b);
+    if (mutation.isPending) return;
+    mutation.mutate({ a, b });
   };
 
   const a = analysis;
-  const spreadData = a?.spread_data?.filter((d: any) => d.zscore !== undefined) || [];
+  const spreadData = ((a?.spread_data ?? []) as unknown as SpreadPoint[]).filter((d) => d.zscore !== undefined);
+  const bt = (a?.backtest ?? null) as PairsBacktest | null;
 
   return (
     <div>
@@ -70,24 +74,24 @@ export default function PairsTrading() {
             <MetricCard label="Half-Life" value={a.half_life == null ? 'n/a' : `${num(a.half_life, 1)} days`} />
             <MetricCard label="Correlation" value={num(a.correlation, 4)} />
             <MetricCard label="Current Z-Score" value={num(a.current_zscore)}
-              color={Math.abs(a.current_zscore) > 2 ? 'var(--accent-yellow)' : 'var(--text-primary)'} />
+              color={Math.abs(a.current_zscore ?? 0) > 2 ? 'var(--accent-yellow)' : 'var(--text-primary)'} />
           </div>
 
           {/* Normalized Prices */}
-          {a.prices_a?.length > 0 && (
+          {a.prices_a.length > 0 && (
             <div className="rounded-lg mb-6 p-4" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
               <Plot
                 data={[
                   {
                     type: 'scatter', mode: 'lines',
-                    x: a.prices_a.map((d: any) => d.date),
-                    y: a.prices_a.map((d: any) => d.price / a.prices_a[0].price),
+                    x: a.prices_a.map((d) => d.date),
+                    y: a.prices_a.map((d) => d.price / a.prices_a[0].price),
                     name: a.symbol_a, line: { color: '#58a6ff' },
                   },
                   {
                     type: 'scatter', mode: 'lines',
-                    x: a.prices_b.map((d: any) => d.date),
-                    y: a.prices_b.map((d: any) => d.price / a.prices_b[0].price),
+                    x: a.prices_b.map((d) => d.date),
+                    y: a.prices_b.map((d) => d.price / a.prices_b[0].price),
                     name: a.symbol_b, line: { color: '#d29922' },
                   },
                 ]}
@@ -112,8 +116,8 @@ export default function PairsTrading() {
                 data={[
                   {
                     type: 'scatter', mode: 'lines',
-                    x: spreadData.map((d: any) => d.date),
-                    y: spreadData.map((d: any) => d.zscore),
+                    x: spreadData.map((d) => d.date),
+                    y: spreadData.map((d) => d.zscore),
                     name: 'Z-Score', line: { color: '#58a6ff' },
                   },
                   {
@@ -147,15 +151,15 @@ export default function PairsTrading() {
           )}
 
           {/* Backtest summary */}
-          {a.backtest && (
+          {bt && (
             <div className="rounded-lg p-4" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
               <h3 className="font-semibold mb-3">Pairs Backtest Results</h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <MetricCard label="Total Return" value={pct(a.backtest.total_return ?? a.backtest.total_return_pct)}
-                  color={signColor(a.backtest.total_return ?? a.backtest.total_return_pct)} />
-                <MetricCard label="Trades" value={a.backtest.total_trades ?? 'n/a'} />
-                <MetricCard label="Win Rate" value={pct(a.backtest.win_rate)} />
-                <MetricCard label="Max Drawdown" value={pct(a.backtest.max_drawdown ?? a.backtest.max_drawdown_pct)} color="var(--accent-red)" />
+                <MetricCard label="Total Return" value={pct(bt.total_return ?? bt.total_return_pct)}
+                  color={signColor(bt.total_return ?? bt.total_return_pct)} />
+                <MetricCard label="Trades" value={bt.total_trades ?? 'n/a'} />
+                <MetricCard label="Win Rate" value={pct(bt.win_rate)} />
+                <MetricCard label="Max Drawdown" value={pct(bt.max_drawdown ?? bt.max_drawdown_pct)} color="var(--accent-red)" />
               </div>
             </div>
           )}

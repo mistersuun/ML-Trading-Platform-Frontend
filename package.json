@@ -9,10 +9,14 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "api:sync": "node -e \"const fs=require('fs');const f='../ML-Trading-Platform-Backend/openapi.json';if(fs.existsSync(f)){fs.copyFileSync(f,'src/api/openapi.json');console.log('synced')}else console.log('backend openapi.json not found; skipped')\"",
+    "api:gen": "openapi-typescript src/api/openapi.json -o src/api/schema.d.ts --default-non-nullable false",
+    "api:check": "npm run api:sync && npm run api:gen && git diff --exit-code src/api/openapi.json src/api/schema.d.ts"
   },
   "dependencies": {
-    "axios": "^1.13.6",
+    "@tanstack/react-query": "^5.104.1",
+    "openapi-fetch": "^0.17.0",
     "plotly.js": "^3.4.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
@@ -35,6 +39,7 @@
     "globals": "^17.4.0",
     "jsdom": "^29.1.1",
     "msw": "^2.15.0",
+    "openapi-typescript": "^7.13.0",
     "tailwindcss": "^4.2.2",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.57.0",

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { screen } from '@testing-library/react'
+import { renderWithClient as render } from '../../test/utils'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { http, HttpResponse } from 'msw'
@@ -27,7 +28,7 @@ describe('ErrorBoundary', () => {
     server.use(http.post('*/api/patterns/scan', () =>
       HttpResponse.json({ signals: [null] })))
     render(<App />)
-    await userEvent.click(screen.getByRole('button', { name: /run full scan/i }))
+    await userEvent.click(screen.getByRole('button', { name: /run scan now/i }))
     expect(await screen.findByText(/this page crashed/i)).toBeInTheDocument()
     // sidebar navigation still works
     await userEvent.click(screen.getByRole('link', { name: /settings/i }))
@@ -45,7 +46,7 @@ describe('retry', () => {
         : HttpResponse.json({ signals: [] })
     }))
     render(<Dashboard />)
-    await userEvent.click(screen.getByRole('button', { name: /run full scan/i }))
+    await userEvent.click(screen.getByRole('button', { name: /run scan now/i }))
     expect(await screen.findByText(/feed down/)).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(await screen.findByText(/No signals detected/)).toBeInTheDocument()
@@ -75,7 +76,7 @@ describe('null handling', () => {
         profit_factor: null, sharpe: null, total_return: null, total_trades: 3, is_valid: false }],
     })))
     render(<Dashboard />)
-    await userEvent.click(screen.getByRole('button', { name: /run full scan/i }))
+    await userEvent.click(screen.getByRole('button', { name: /run scan now/i }))
     await screen.findByText('ZZZ')
     expect(screen.getAllByText('n/a').length).toBeGreaterThanOrEqual(3)
   })

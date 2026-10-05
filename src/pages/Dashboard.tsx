@@ -1,32 +1,33 @@
-import { scanPatterns } from '../api/client';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { ApiError, scanPatterns } from '../api/client';
+import { LATEST_SCAN_KEY, useLatestScan } from '../api/hooks';
+import type { ScanSignal } from '../api/types';
 import MetricCard from '../components/MetricCard';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorPanel from '../components/ErrorPanel';
-import { useAction } from '../lib/useAsync';
 import { num, pct, usd, signColor } from '../lib/format';
 
-interface Signal {
-  symbol: string;
-  pattern: string;
-  signal: string;
-  signal_date: string;
-  days_ago: number;
-  price: number | null;
-  win_rate: number | null;
-  profit_factor: number | null;
-  sharpe: number | null;
-  total_return?: number | null;
-  total_return_pct?: number | null; // legacy name, same fraction semantics
-  total_trades: number;
-  is_valid: boolean;
-}
-
-const scan = () => scanPatterns().then((r) => (r.data.signals ?? []) as Signal[]);
-
 export default function Dashboard() {
-  const { data, error, loading, run, retry } = useAction(scan);
-  const signals = data ?? [];
-  const scanned = data !== null;
+  const qc = useQueryClient();
+  const latest = useLatestScan();
+  const scan = useMutation({
+    mutationFn: () => scanPatterns(),
+    // A live scan replaces the displayed nightly result until the next reload.
+    onSuccess: (res) => {
+      qc.setQueryData(LATEST_SCAN_KEY, {
+        kind: 'technical', payload: res.signals, generated_at: new Date().toISOString(), age_hours: 0, stale: false,
+      });
+    },
+  });
+  const loading = scan.isPending;
+  const noNightly = latest.error instanceof ApiError && latest.error.status === 404;
+  // 404 = no nightly run stored yet: an empty state, not an error.
+  const error = scan.error ?? (noNightly ? null : latest.error);
+  const retry = () => (scan.error ? scan.mutate() : void latest.refetch());
+  const signals: ScanSignal[] = latest.data?.payload ?? [];
+  const scanned = latest.data !== undefined;
+  const generatedAt = latest.data ? new Date(latest.data.generated_at) : null;
+  const stale = latest.data?.stale ?? false;
 
   const buys = signals.filter((s) => s.signal === 'BUY');
   const sells = signals.filter((s) => s.signal === 'SELL');
@@ -37,14 +38,24 @@ export default function Dashboard() {
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold">Dashboard</h2>
         <button
-          onClick={() => void run()}
+          onClick={() => { if (!scan.isPending) scan.mutate(); }}
           disabled={loading}
           className="px-6 py-2 rounded font-semibold text-black transition-opacity disabled:opacity-50"
           style={{ background: 'var(--accent-green)' }}
         >
-          {loading ? 'Scanning...' : 'Run Full Scan'}
+          {loading ? 'Scanning...' : 'Run scan now'}
         </button>
       </div>
+
+      {generatedAt && !loading && (
+        <p className="text-sm mb-4 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
+          <span>Latest scan: {generatedAt.toLocaleString()}</span>
+          {stale && (
+            <span role="status" className="px-2 py-0.5 rounded text-xs font-semibold text-black"
+              style={{ background: 'var(--accent-yellow)' }}>STALE</span>
+          )}
+        </p>
+      )}
 
       {loading && <LoadingSpinner text="Scanning all markets and patterns... this may take a few minutes" />}
 
@@ -109,9 +120,11 @@ export default function Dashboard() {
         </>
       )}
 
-      {!scanned && !loading && !error && (
+      {latest.isPending && !scanned && !loading && <LoadingSpinner text="Loading latest scan..." />}
+
+      {!scanned && !loading && !error && !latest.isPending && (
         <div className="text-center py-20" style={{ color: 'var(--text-secondary)' }}>
-          <p className="text-lg mb-2">Click "Run Full Scan" to scan all markets for pattern signals.</p>
+          <p className="text-lg mb-2">No nightly scan results yet. Click "Run scan now" to scan all markets for pattern signals.</p>
           <p className="text-sm">Scans the last 30 days across all watchlist symbols and 20 patterns.</p>
         </div>
       )}

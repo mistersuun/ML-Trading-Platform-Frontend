@@ -1,39 +1,30 @@
 import { useState } from 'react';
 import Plot from 'react-plotly.js';
-import { fetchOHLCV, listPatterns, detectPattern, runBacktest } from '../api/client';
+import { useAnalysis, usePatterns } from '../api/hooks';
+import type { Metrics } from '../api/types';
 import MetricCard from '../components/MetricCard';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorPanel from '../components/ErrorPanel';
-import { useAction, useLoad } from '../lib/useAsync';
 import { num, pct, signColor } from '../lib/format';
 
-const loadPatterns = () => listPatterns().then((r) => (r.data.patterns ?? []) as string[]);
-const analyzeSymbol = async (symbol: string, pattern: string) => {
-  const [dataRes, sigRes, btRes] = await Promise.all([
-    fetchOHLCV(symbol),
-    detectPattern(symbol, pattern),
-    runBacktest(symbol, pattern),
-  ]);
-  return { ohlcv: (dataRes.data.data ?? []) as any[], signals: sigRes.data as any, backtest: btRes.data as any };
-};
-
 export default function TechnicalScanner() {
-  const { data: patternsData, error: patError, loading: patLoading, retry: retryPatterns } = useLoad(loadPatterns);
-  const patterns = patternsData ?? [];
+  const { data: patternsData, error: patError, isPending: patLoading, refetch: refetchPatterns } = usePatterns();
+  const retryPatterns = () => void refetchPatterns();
+  const patterns = patternsData?.patterns ?? [];
   const [symbol, setSymbol] = useState('AAPL');
   const [chosenPattern, setChosenPattern] = useState('');
   const pattern = chosenPattern || patterns[0] || '';
-  const { data: result, error, loading, run, retry } = useAction(analyzeSymbol);
-  const ohlcv = result?.ohlcv ?? [];
-  const signals = result?.signals ?? null;
-  const backtest = result?.backtest ?? null;
+  const [target, setTarget] = useState<{ symbol: string; pattern: string } | null>(null);
+  const { ohlcv: ohlcvData, signals, backtest, loading, done, error, retry } = useAnalysis(target);
+  const ohlcv = ohlcvData?.data ?? [];
+  const result = done;
 
   const handleAnalyze = () => {
     if (!symbol || !pattern) return;
-    void run(symbol, pattern);
+    setTarget({ symbol, pattern });
   };
 
-  const m = backtest?.metrics;
+  const m = (backtest?.metrics ?? null) as Metrics | null;
 
   return (
     <div>
@@ -76,7 +67,7 @@ export default function TechnicalScanner() {
         <p style={{ color: 'var(--text-secondary)' }}>No price data returned for {symbol}.</p>
       )}
 
-      {ohlcv.length > 0 && !loading && (
+      {done && ohlcv.length > 0 && !loading && (
         <>
           {/* Candlestick Chart */}
           <div className="rounded-lg mb-6 p-4" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
@@ -96,16 +87,16 @@ export default function TechnicalScanner() {
                 ...(signals?.buys?.length ? [{
                   type: 'scatter' as const,
                   mode: 'markers' as const,
-                  x: signals.buys.map((b: any) => b.date),
-                  y: signals.buys.map((b: any) => b.price),
+                  x: signals.buys.map((b) => b.date),
+                  y: signals.buys.map((b) => b.price),
                   marker: { symbol: 'triangle-up', size: 12, color: '#00ff88' },
                   name: 'Buy',
                 }] : []),
                 ...(signals?.sells?.length ? [{
                   type: 'scatter' as const,
                   mode: 'markers' as const,
-                  x: signals.sells.map((s: any) => s.date),
-                  y: signals.sells.map((s: any) => s.price),
+                  x: signals.sells.map((s) => s.date),
+                  y: signals.sells.map((s) => s.price),
                   marker: { symbol: 'triangle-down', size: 12, color: '#ff4444' },
                   name: 'Sell',
                 }] : []),
@@ -140,14 +131,14 @@ export default function TechnicalScanner() {
           )}
 
           {/* Equity Curve */}
-          {backtest?.equity_curve?.length > 0 && (
+          {(backtest?.equity_curve.length ?? 0) > 0 && (
             <div className="rounded-lg mb-6 p-4" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
               <Plot
                 data={[{
                   type: 'scatter',
                   mode: 'lines',
-                  x: backtest.equity_curve.map((d: any) => d.date),
-                  y: backtest.equity_curve.map((d: any) => d.value),
+                  x: backtest!.equity_curve.map((d) => d.date),
+                  y: backtest!.equity_curve.map((d) => d.value),
                   line: { color: '#58a6ff', width: 2 },
                   name: 'Equity',
                 }]}
@@ -168,9 +159,9 @@ export default function TechnicalScanner() {
           )}
 
           {/* Trade Log */}
-          {backtest?.trades?.length > 0 && (
+          {(backtest?.trades.length ?? 0) > 0 && (
             <div className="overflow-x-auto rounded-lg" style={{ border: '1px solid var(--border)' }}>
-              <h3 className="p-3 font-semibold" style={{ background: 'var(--bg-secondary)' }}>Trade Log ({backtest.trades.length} trades)</h3>
+              <h3 className="p-3 font-semibold" style={{ background: 'var(--bg-secondary)' }}>Trade Log ({backtest!.trades.length} trades)</h3>
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{ background: 'var(--bg-tertiary)' }}>
@@ -184,7 +175,7 @@ export default function TechnicalScanner() {
                   </tr>
                 </thead>
                 <tbody>
-                  {backtest.trades.map((t: any, i: number) => (
+                  {backtest!.trades.map((t, i) => (
                     <tr key={i} className="border-t" style={{ borderColor: 'var(--border)' }}>
                       <td className="p-2 font-mono text-xs">{t.entry_date?.slice(0, 10)}</td>
                       <td className="p-2 font-mono text-xs">{t.exit_date?.slice(0, 10)}</td>

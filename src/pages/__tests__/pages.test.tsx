@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
+import { renderWithClient as render } from '../../test/utils'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../test/server'
@@ -15,7 +16,7 @@ describe('smoke', () => {
   it('Dashboard renders and shows scan results', async () => {
     render(<Dashboard />)
     expect(screen.getByRole('heading', { name: 'Dashboard' })).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: /run full scan/i }))
+    await userEvent.click(screen.getByRole('button', { name: /run scan now/i }))
     expect(await screen.findByText('AAPL')).toBeInTheDocument()
     expect(screen.getByText('Total Signals')).toBeInTheDocument()
   })
@@ -61,7 +62,7 @@ describe('bug pinning', () => {
   // FE-1: backend sends total_return_pct as a fraction (0.153); Dashboard prints it without *100
   it('FE-1 Dashboard shows 15.3% for total_return_pct 0.153', async () => {
     render(<Dashboard />)
-    await userEvent.click(screen.getByRole('button', { name: /run full scan/i }))
+    await userEvent.click(screen.getByRole('button', { name: /run scan now/i }))
     await screen.findByText('AAPL')
     expect(screen.getByText(/15\.3/)).toBeInTheDocument()
   })
@@ -81,14 +82,14 @@ describe('bug pinning', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     server.use(http.post('*/api/patterns/scan', () => HttpResponse.json({ detail: 'boom' }, { status: 500 })))
     render(<Dashboard />)
-    await userEvent.click(screen.getByRole('button', { name: /run full scan/i }))
+    await userEvent.click(screen.getByRole('button', { name: /run scan now/i }))
     expect(await screen.findByRole('alert', {}, { timeout: 500 })).toBeInTheDocument()
   })
 
   it('FE-3b Dashboard shows a visible error on 200 {error}', async () => {
     server.use(http.post('*/api/patterns/scan', () => HttpResponse.json({ error: 'No data for AAPL' })))
     render(<Dashboard />)
-    await userEvent.click(screen.getByRole('button', { name: /run full scan/i }))
+    await userEvent.click(screen.getByRole('button', { name: /run scan now/i }))
     expect(await screen.findByText(/No data for AAPL/, {}, { timeout: 500 })).toBeInTheDocument()
   })
 })

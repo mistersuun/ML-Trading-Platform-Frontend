@@ -1,17 +1,20 @@
 import { useState } from 'react';
 import Plot from 'react-plotly.js';
+import { useMutation } from '@tanstack/react-query';
 import { mlPredict } from '../api/client';
 import MetricCard from '../components/MetricCard';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorPanel from '../components/ErrorPanel';
-import { useAction } from '../lib/useAsync';
+import type { Metrics } from '../api/types';
 import { num, pct, usd, signColor } from '../lib/format';
 
-const predict = (symbol: string) => mlPredict(symbol).then((r) => r.data);
 
 export default function MLSignals() {
   const [symbol, setSymbol] = useState('AAPL');
-  const { data: r, error, loading, run, retry } = useAction(predict);
+  const mutation = useMutation({ mutationFn: (s: string) => mlPredict(s) });
+  const { data: r, error, isPending: loading } = mutation;
+  const retry = () => { if (mutation.variables !== undefined) mutation.mutate(mutation.variables); };
+  const metrics = (r?.metrics ?? null) as Metrics | null;
 
   return (
     <div>
@@ -21,7 +24,7 @@ export default function MLSignals() {
         <input value={symbol} onChange={(e) => setSymbol(e.target.value.toUpperCase())}
           placeholder="Symbol" className="px-3 py-2 rounded text-sm w-40"
           style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-primary)' }} />
-        <button onClick={() => void run(symbol)} disabled={loading}
+        <button onClick={() => { if (!mutation.isPending) mutation.mutate(symbol); }} disabled={loading}
           className="px-6 py-2 rounded font-semibold text-black disabled:opacity-50"
           style={{ background: 'var(--accent-blue)' }}>
           {loading ? 'Training...' : 'Train & Predict'}
@@ -35,28 +38,28 @@ export default function MLSignals() {
       {r && !loading && (
         <>
           {/* Metrics */}
-          {r.metrics && (
+          {metrics && (
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-6">
-              <MetricCard label="Win Rate" value={pct(r.metrics.win_rate)} />
-              <MetricCard label="Sharpe" value={num(r.metrics.sharpe)} />
-              <MetricCard label="Profit Factor" value={num(r.metrics.profit_factor)} />
-              <MetricCard label="Total Return" value={pct(r.metrics.total_return)}
-                color={signColor(r.metrics.total_return)} />
-              <MetricCard label="Max Drawdown" value={pct(r.metrics.max_drawdown)} color="var(--accent-red)" />
-              <MetricCard label="Trades" value={r.metrics.total_trades ?? 'n/a'} />
+              <MetricCard label="Win Rate" value={pct(metrics.win_rate)} />
+              <MetricCard label="Sharpe" value={num(metrics.sharpe)} />
+              <MetricCard label="Profit Factor" value={num(metrics.profit_factor)} />
+              <MetricCard label="Total Return" value={pct(metrics.total_return)}
+                color={signColor(metrics.total_return)} />
+              <MetricCard label="Max Drawdown" value={pct(metrics.max_drawdown)} color="var(--accent-red)" />
+              <MetricCard label="Trades" value={metrics.total_trades ?? 'n/a'} />
               <MetricCard label="Valid" value={r.is_valid ? 'YES' : 'NO'}
                 color={r.is_valid ? 'var(--accent-green)' : 'var(--accent-red)'} />
             </div>
           )}
 
           {/* Feature Importance */}
-          {r.feature_importance?.length > 0 && (
+          {r.feature_importance.length > 0 && (
             <div className="rounded-lg mb-6 p-4" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
               <Plot
                 data={[{
                   type: 'bar',
-                  x: r.feature_importance.map((f: any) => f.importance),
-                  y: r.feature_importance.map((f: any) => f.feature),
+                  x: r.feature_importance.map((f) => f.importance),
+                  y: r.feature_importance.map((f) => f.feature),
                   orientation: 'h',
                   marker: { color: '#58a6ff' },
                 }]}
@@ -74,13 +77,13 @@ export default function MLSignals() {
           )}
 
           {/* Equity Curve */}
-          {r.equity_curve?.length > 0 && (
+          {r.equity_curve.length > 0 && (
             <div className="rounded-lg mb-6 p-4" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
               <Plot
                 data={[{
                   type: 'scatter', mode: 'lines',
-                  x: r.equity_curve.map((d: any) => d.date),
-                  y: r.equity_curve.map((d: any) => d.value),
+                  x: r.equity_curve.map((d) => d.date),
+                  y: r.equity_curve.map((d) => d.value),
                   line: { color: '#00ff88', width: 2 }, name: 'ML Equity',
                 }]}
                 layout={{
@@ -96,12 +99,12 @@ export default function MLSignals() {
             </div>
           )}
 
-          {!(r.signals?.length > 0) && (
-            <p style={{ color: 'var(--text-secondary)' }}>The model produced no signals for {r.symbol ?? symbol}.</p>
+          {r.signals.length === 0 && (
+            <p style={{ color: 'var(--text-secondary)' }}>The model produced no signals for {r.symbol}.</p>
           )}
 
           {/* Signals table */}
-          {r.signals?.length > 0 && (
+          {r.signals.length > 0 && (
             <div className="overflow-x-auto rounded-lg" style={{ border: '1px solid var(--border)' }}>
               <h3 className="p-3 font-semibold" style={{ background: 'var(--bg-secondary)' }}>
                 ML Signals ({r.total_signals})
@@ -116,7 +119,7 @@ export default function MLSignals() {
                   </tr>
                 </thead>
                 <tbody>
-                  {r.signals.slice(-20).reverse().map((s: any, i: number) => (
+                  {r.signals.slice(-20).reverse().map((s, i) => (
                     <tr key={i} className="border-t" style={{ borderColor: 'var(--border)' }}>
                       <td className="p-2 font-mono text-xs">{s.date?.slice(0, 10)}</td>
                       <td className="p-2 font-bold" style={{ color: s.signal === 'BUY' ? 'var(--accent-green)' : 'var(--accent-red)' }}>{s.signal}</td>

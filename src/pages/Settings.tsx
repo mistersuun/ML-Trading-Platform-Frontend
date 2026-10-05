@@ -1,9 +1,6 @@
-import { getConfig } from '../api/client';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorPanel from '../components/ErrorPanel';
-import { useLoad } from '../lib/useAsync';
-
-const loadConfig = () => getConfig().then((r) => r.data);
+import { useConfig } from '../api/hooks';
 
 function Section({ title, data }: { title: string; data: Record<string, unknown> | undefined }) {
   const entries = Object.entries(data ?? {});
@@ -27,7 +24,8 @@ function Section({ title, data }: { title: string; data: Record<string, unknown>
 }
 
 export default function Settings() {
-  const { data: config, error, loading, retry } = useLoad(loadConfig);
+  const { data: config, error, isPending: loading, refetch } = useConfig();
+  const retry = () => void refetch();
 
   if (loading) return <LoadingSpinner text="Loading configuration..." />;
 
@@ -42,7 +40,7 @@ export default function Settings() {
           <Section title="Risk Management" data={config.risk} />
           <Section title="ML Configuration" data={config.ml} />
           <Section title="Watchlist" data={Object.fromEntries(
-            Object.entries(config.watchlist ?? {}).map(([k, v]) => [k, (v as string[]).join(', ')])
+            Object.entries(config.watchlist ?? {}).map(([k, v]) => [k, Array.isArray(v) ? v.join(', ') : String(v)])
           )} />
         </>
       )}
