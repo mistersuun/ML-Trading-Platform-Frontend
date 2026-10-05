@@ -1,0 +1,22 @@
+name: CI
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # 5 pre-existing react-hooks/static-components errors in src/pages/Settings.tsx; make blocking once fixed
+      - run: npm run lint
+        continue-on-error: true
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
