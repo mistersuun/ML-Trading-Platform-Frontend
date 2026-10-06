@@ -5,6 +5,7 @@ import { getApi, toApiError, isAbortError, ApiError } from '../api/client';
 import { useLatestScan } from '../api/hooks';
 import { MINUTE } from '../api/query';
 import type { components } from '../api/schema';
+import BriefingPanel from './BriefingPanel';
 import ErrorPanel from '../components/ErrorPanel';
 import { Hero, Meter, PageHeader, Panel, EmptyState, Status, type Tone } from '../components/ui';
 import { BulletBar, DrawdownChart, HBarList, LineChart, StackedBar } from '../components/charts';
@@ -466,7 +467,7 @@ export default function Overview() {
           <span role="group" aria-label="Range" style={{ display: 'flex', gap: 4 }}>
             {RANGES.map((r) => (
               <button key={r} type="button" className="btn" aria-pressed={r === range} onClick={() => setRange(r)}
-                style={{ fontSize: 12, minHeight: 26, padding: '3px 9px', ...(r === range ? { background: '#22222A' } : { background: 'transparent', color: 'var(--text-2)', borderColor: 'var(--border)' }) }}>
+                style={{ fontSize: 12, minHeight: 26, padding: '3px 9px', ...(r === range ? { background: 'var(--toggle-on)' } : { background: 'transparent', color: 'var(--text-2)', borderColor: 'var(--border)' }) }}>
                 {r}
               </button>
             ))}
@@ -474,6 +475,7 @@ export default function Overview() {
         }
       />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <BriefingPanel />
         {overview.isPending ? (
           <Panel title="Portfolio value"><Loading what="portfolio" height={160} /></Panel>
         ) : noHoldings ? (

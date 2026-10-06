@@ -7,12 +7,14 @@ import PageHeader from '../components/ui/PageHeader';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorPanel from '../components/ErrorPanel';
 import type { Metrics } from '../api/types';
+import { useResolvedTheme } from '../lib/theme';
 import { plotlyLayout, plotlyConfig, seriesColor } from '../lib/plotlyTheme';
 import { num, pct, usd, signColor } from '../lib/format';
 import { abstainReasonLabel, abstainRows, abstainTitle, calibrationLabel, probabilityHeader } from './mlModel';
 
 
 export default function MLSignals() {
+  useResolvedTheme(); // Plotly takes resolved colours: re-render on theme change
   const [symbol, setSymbol] = useState('AAPL');
   const mutation = useMutation({ mutationFn: (s: string) => mlPredict(s) });
   const { data: r, error, isPending: loading } = mutation;

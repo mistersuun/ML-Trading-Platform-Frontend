@@ -22,7 +22,7 @@ export default function Hero({ label, value, delta, stats }: Props) {
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px 40px', alignItems: 'flex-end' }}>
       <div>
         <div style={{ color: 'var(--text-2)', fontSize: 12 }}>{label}</div>
-        <div style={{ fontSize: 44, fontWeight: 600, letterSpacing: -0.5, lineHeight: 1.1 }}>{value}</div>
+        <div style={{ fontSize: 'clamp(30px, 9vw, 44px)', overflowWrap: 'anywhere', fontWeight: 600, letterSpacing: -0.5, lineHeight: 1.1 }}>{value}</div>
         {delta && (
           <div style={{ marginTop: 4 }}>
             <span style={{ color: toneColor(delta.tone) }}>

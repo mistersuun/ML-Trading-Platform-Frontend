@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* Design tokens (dark is the only theme for now). Keep in sync with lib/tokens.ts. */
+/* Design tokens. Dark is the default; light overrides below. Keep in sync with lib/tokens.ts. */
 :root {
   --bg: #0C0C10;
   --panel: #131318;
@@ -21,6 +21,8 @@
   --sidebar: #0F0F13;
   --sidebar-hover: #16161C;
   --toggle-on: #22222A;
+  --accent-hover: #B5CEEE;
+  --on-accent: #0C0C10;
 
   /* Categorical series, fixed order (CVD-validated on --panel). */
   --series-1: #3987E5;
@@ -47,6 +49,52 @@
   color-scheme: dark;
 }
 
+:root[data-theme="light"] {
+  --bg: #F7F7F8;
+  --panel: #FFFFFF;
+  --raised: #F1F1F3;
+  --hover: #EBEBEE;
+  --border: #DCDCE0;
+  --border-strong: #C2C3C8;
+  --text-1: #18181B;
+  --text-2: #4A4B52;
+  --text-3: #6B6C73;
+  --accent: #2F6DB5;
+  --up: #2E7D55;
+  --down: #C2453B;
+  --warn: #855F00;
+  --warn-surface: #FBF3DC;
+  --down-surface: #FBE9E7;
+  --grid: #ECECEF;
+  --sidebar: #F1F1F3;
+  --sidebar-hover: #E7E7EB;
+  --toggle-on: #E4E4E9;
+  --accent-hover: #1F4F8C;
+  --on-accent: #FFFFFF;
+
+  /* Categorical series: each >= 3:1 on the light panel, still CVD-distinct. */
+  --series-1: #2F6FC4;
+  --series-2: #C24F1C;
+  --series-3: #13805A;
+  --series-4: #9C6A00;
+  --series-5: #6F63D1;
+  --series-6: #B83F7F;
+
+  --ramp-1: #5B93D6;
+  --ramp-2: #4A86CE;
+  --ramp-3: #3A79C6;
+  --ramp-4: #2F6FC4;
+  --ramp-5: #2A64B3;
+  --ramp-6: #235799;
+
+  --drift-over: #2F6FC4;
+  --drift-under: #C2453B;
+  --drift-mid: #6B6C73;
+  --drift-band: #EDEDF0;
+
+  color-scheme: light;
+}
+
 body {
   margin: 0;
   background: var(--bg);
@@ -59,7 +107,7 @@ body {
 * { box-sizing: border-box; }
 
 a { color: var(--accent); }
-a:hover { color: #B5CEEE; }
+a:hover { color: var(--accent-hover); }
 
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
@@ -82,6 +130,10 @@ a:hover { color: #B5CEEE; }
 }
 .ph { margin: 0 0 2px; font-size: 13px; font-weight: 600; color: var(--text-1); }
 .sub { color: var(--text-2); font-size: 12px; }
+/* Every item carries a leading dot; the box is pulled left by one dot's width and that strip
+   is clipped, so the dot of whichever item starts a line (first or wrapped) is never shown. */
+.meta { display: flex; flex-wrap: wrap; gap: 2px 0; margin-left: -20px; clip-path: inset(0 0 0 20px); }
+.meta > *::before { content: '·'; display: inline-block; width: 4px; margin: 0 8px; color: var(--text-3); }
 .t { width: 100%; border-collapse: collapse; }
 .t th {
   text-align: left; font-weight: 500; font-size: 12px; color: var(--text-2); padding: 0 8px;
@@ -97,8 +149,8 @@ a:hover { color: #B5CEEE; }
 }
 .btn:hover:not(:disabled) { background: var(--hover); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-primary { background: var(--accent); color: #0C0C10; border-color: var(--accent); font-weight: 600; }
-.btn-primary:hover:not(:disabled) { background: #B5CEEE; }
+.btn-primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600; }
+.btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
 .field {
   font: inherit; font-size: 13px; min-height: 28px; padding: 3px 8px; border-radius: 3px;
   background: var(--raised); color: var(--text-1); border: 1px solid var(--border-strong);

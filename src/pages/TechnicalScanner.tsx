@@ -9,7 +9,8 @@ import ErrorPanel from '../components/ErrorPanel';
 import { BulletBar, Histogram, LineChart } from '../components/charts';
 import { Panel, PageHeader, EmptyState, Status, toneColor, type Tone } from '../components/ui';
 import { candleStyle, markerDown, markerUp, plotlyConfig, plotlyLayout } from '../lib/plotlyTheme';
-import { T } from '../lib/tokens';
+import { PALETTES, SERIES, T } from '../lib/tokens';
+import { useResolvedTheme } from '../lib/theme';
 import { int, isNum, NA, shortDate, signedPct, signedUsd, usd, xTickCount } from '../lib/format';
 import { evenIndices } from '../components/charts/scale';
 import {
@@ -87,7 +88,9 @@ function Hero({ c }: { c: Candidate }) {
 
 function PriceChart({ c }: { c: Candidate }) {
   const bars = c.bars;
+  const theme = useResolvedTheme(); // Plotly takes resolved colours, so rebuild on theme change
   const data = useMemo(() => {
+    const P = PALETTES[theme];
     if (bars.length === 0) return [];
     const first = bars[0].date;
     const entries = c.trades.filter((t) => t.entry_date >= first);
@@ -95,20 +98,21 @@ function PriceChart({ c }: { c: Candidate }) {
     return [
       {
         type: 'candlestick', x: bars.map((b) => b.date), open: bars.map((b) => b.open), high: bars.map((b) => b.high),
-        low: bars.map((b) => b.low), close: bars.map((b) => b.close), ...candleStyle, name: c.symbol,
+        low: bars.map((b) => b.low), close: bars.map((b) => b.close), ...candleStyle(), name: c.symbol,
       },
       ...(entries.length ? [{
         type: 'scatter', mode: 'markers', name: 'Buy at next open', x: entries.map((t) => t.entry_date),
-        y: entries.map((t) => t.entry_price), marker: { ...markerUp, color: T.accent },
+        y: entries.map((t) => t.entry_price), marker: { ...markerUp(), color: P.accent },
       }] : []),
       ...(exits.length ? [{
         type: 'scatter', mode: 'markers', name: 'Exit', x: exits.map((t) => t.exit_date),
-        y: exits.map((t) => t.exit_price), marker: { ...markerDown, color: T.text1 },
+        y: exits.map((t) => t.exit_price), marker: { ...markerDown(), color: P.text1 },
       }] : []),
     ];
-  }, [bars, c.trades, c.symbol]);
+  }, [bars, c.trades, c.symbol, theme]);
 
   const layout = useMemo(() => {
+    const P = PALETTES[theme];
     const last = bars.length ? bars[bars.length - 1].date : null;
     const first = bars.length ? bars[0].date : null;
     const showHold = last !== null && first !== null && c.holdout_start <= last;
@@ -118,13 +122,13 @@ function PriceChart({ c }: { c: Candidate }) {
       extra: {
         hovermode: 'x unified',
         ...(showHold ? {
-          shapes: [{ type: 'rect', xref: 'x', yref: 'paper', x0, x1: last, y0: 0, y1: 1, fillcolor: '#16161C', line: { width: 0 }, layer: 'below' }],
+          shapes: [{ type: 'rect', xref: 'x', yref: 'paper', x0, x1: last, y0: 0, y1: 1, fillcolor: P.sidebarHover, line: { width: 0 }, layer: 'below' }],
           annotations: [{ xref: 'x', yref: 'paper', x: x0, y: 1, xanchor: 'left', yanchor: 'top', showarrow: false,
-            text: `Hold-out from ${longDate(c.holdout_start)}`, font: { color: T.text2, size: 12 } }],
+            text: `Hold-out from ${longDate(c.holdout_start)}`, font: { color: P.text2, size: 12 } }],
         } : {}),
       },
     });
-  }, [bars, c.holdout_start]);
+  }, [bars, c.holdout_start, theme]);
 
   return (
     <Panel
@@ -147,7 +151,7 @@ function OosPanel({ c }: { c: Candidate }) {
     return evenIndices(n, xTickCount()).map((index) => ({ index, label: shortDate(merged.x[index], true) }));
   }, [merged.x, n]);
   const series = useMemo(() => [
-    { name: 'Out of sample (real test)', values: merged.a, color: '#3987E5' },
+    { name: 'Out of sample (real test)', values: merged.a, color: SERIES[0] },
     { name: 'Fitted on the past (ignored)', values: merged.b, color: T.text3, dashed: true },
   ], [merged]);
   return (

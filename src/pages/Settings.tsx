@@ -1,6 +1,7 @@
 import PageHeader from '../components/ui/PageHeader';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorPanel from '../components/ErrorPanel';
+import ThemeToggle from '../components/ui/ThemeToggle';
 import { useConfig } from '../api/hooks';
 import { pct, usd } from '../lib/format';
 
@@ -32,6 +33,18 @@ function Section({ title, data }: { title: string; data: Record<string, unknown>
   );
 }
 
+function Appearance() {
+  return (
+    <div className="panel mb-4">
+      <h3 className="font-semibold mb-3">Appearance</h3>
+      <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+        <span style={{ color: 'var(--text-2)' }}>Theme (System follows your OS setting)</span>
+        <ThemeToggle />
+      </div>
+    </div>
+  );
+}
+
 export default function Settings() {
   const { data: config, error, isPending: loading, refetch } = useConfig();
   const retry = () => void refetch();
@@ -41,6 +54,7 @@ export default function Settings() {
   return (
     <div>
       <PageHeader title="Settings" />
+      <Appearance />
       {error && <ErrorPanel error={error} onRetry={retry} />}
       {config && (
         <>

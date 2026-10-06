@@ -16,7 +16,7 @@ export const scanSignal = {
   win_rate: 0.6,
   profit_factor: 1.8,
   sharpe: 1.2,
-  total_return_pct: 0.153, // backend sends a fraction
+  total_return: 0.153, // backend sends a fraction
   total_trades: 12,
   is_valid: true,
 }
@@ -178,7 +178,28 @@ export const proposalFixture = {
   ],
 }
 
+export const briefingFixture = {
+  status: 'ok',
+  generated_at: '2026-10-05T22:40:00+00:00',
+  model: 'claude-opus-5-5',
+  reason: null,
+  error: null,
+  briefing: {
+    headline: 'Scan found no new survivors; the signal sleeve is quiet',
+    observations: ['780 candidates tested, none cleared deflated Sharpe', 'International equity is 3 points under target'],
+    risks: ['Drawdown is 1.4% from peak; the halt is at 10%'],
+    what_changed: ['One fewer candidate passed the hold-out gate than last night'],
+  },
+  usage: { input_tokens: 4200, output_tokens: 310, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+  cost_usd: 0.012,
+  cost_estimated: false,
+  request_id: 'req_test',
+  budget: { spent_today_usd: 0.012, daily_limit_usd: 0.5, spent_month_usd: 0.41, monthly_limit_usd: 5 },
+  advisory: 'Advisory only: nothing here is an instruction to trade. Nothing is ordered.',
+}
+
 const overviewHandlers = [
+  http.get(u('/briefing'), () => HttpResponse.json(briefingFixture)),
   http.get(u('/portfolio/overview'), () => HttpResponse.json(overviewFixture)),
   http.get(u('/risk/status'), () => HttpResponse.json(riskFixture)),
   http.get(u('/allocation/proposal'), () => HttpResponse.json(proposalFixture)),

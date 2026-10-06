@@ -58,8 +58,10 @@ const errorMiddleware: Middleware = {
       if (parsed) throw new ApiError(response.status, parsed.code, parsed.message, parsed.details);
       throw new ApiError(response.status, 'http_error', `Request failed (HTTP ${response.status})`);
     }
-    // Legacy 200 {error: ...} bodies are failures too.
-    const parsed = parseErrorBody(body, false);
+    // Legacy 200 {error: ...} bodies are failures too. A body with its own `status` (e.g. BriefingResponse, whose
+    // `error` is a message that belongs to a skipped/error status) is a result, not a failure.
+    const hasStatus = !!body && typeof body === 'object' && 'status' in body;
+    const parsed = hasStatus ? null : parseErrorBody(body, false);
     if (parsed) throw new ApiError(response.status, parsed.code, parsed.message, parsed.details);
     return undefined;
   },

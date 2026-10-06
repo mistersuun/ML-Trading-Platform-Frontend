@@ -65,6 +65,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/briefing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Briefing
+         * @description The latest stored briefing (headline, observations, risks, what changed), its model, token usage and cost,
+         *     and today's / this month's LLM spend against the caps. status is `none` until one exists, `skipped` (budget,
+         *     no_api_key, disabled) or `error` when the last attempt did not produce text. Advisory only.
+         */
+        get: operations["get_briefing_api_briefing_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/briefing/regenerate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Regenerate Briefing
+         * @description Re-run the briefing from the latest stored scan results. Heavy (shares the cap: 429 when busy) and subject
+         *     to the same budget: over budget it returns status `skipped`, reason `budget`, and calls nothing.
+         */
+        post: operations["regenerate_briefing_api_briefing_regenerate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/config/": {
         parameters: {
             query?: never;
@@ -610,10 +653,6 @@ export interface components {
             metrics: {
                 [key: string]: unknown;
             };
-            /** Metrics Display */
-            metrics_display: {
-                [key: string]: unknown;
-            };
             /** Pattern */
             pattern: string;
             /** Symbol */
@@ -638,6 +677,98 @@ export interface components {
             low: number;
             /** Open */
             open: number;
+        };
+        /**
+         * BriefingAttempt
+         * @description A later skipped/failed run that did not replace the displayed briefing.
+         */
+        BriefingAttempt: {
+            /** At */
+            at?: string | null;
+            /** Error */
+            error?: string | null;
+            /** Reason */
+            reason?: string | null;
+            /** Status */
+            status: string;
+        };
+        /** BriefingBody */
+        BriefingBody: {
+            /** Headline */
+            headline: string;
+            /** Observations */
+            observations: string[];
+            /** Risks */
+            risks: string[];
+            /** What Changed */
+            what_changed: string[];
+        };
+        /** BriefingBudget */
+        BriefingBudget: {
+            /** Daily Limit Usd */
+            daily_limit_usd: number;
+            /** Monthly Limit Usd */
+            monthly_limit_usd: number;
+            /** Spent Month Usd */
+            spent_month_usd: number;
+            /** Spent Today Usd */
+            spent_today_usd: number;
+        };
+        /**
+         * BriefingResponse
+         * @description The latest Claude briefing. Advisory only. status: none (never generated) | ok | skipped (reason: budget,
+         *     no_api_key, disabled, ledger) | error (error holds the message).
+         *     last_attempt: a newer skipped/failed run when the briefing shown is an older ok one.
+         */
+        BriefingResponse: {
+            /** Advisory */
+            advisory: string;
+            briefing?: components["schemas"]["BriefingBody"] | null;
+            budget: components["schemas"]["BriefingBudget"];
+            /**
+             * Cost Estimated
+             * @default false
+             */
+            cost_estimated?: boolean;
+            /** Cost Usd */
+            cost_usd?: number | null;
+            /** Error */
+            error?: string | null;
+            /** Generated At */
+            generated_at?: string | null;
+            last_attempt?: components["schemas"]["BriefingAttempt"] | null;
+            /** Model */
+            model?: string | null;
+            /** Reason */
+            reason?: string | null;
+            /** Request Id */
+            request_id?: string | null;
+            /** Status */
+            status: string;
+            usage?: components["schemas"]["BriefingUsage"] | null;
+        };
+        /** BriefingUsage */
+        BriefingUsage: {
+            /**
+             * Cache Creation Input Tokens
+             * @default 0
+             */
+            cache_creation_input_tokens?: number;
+            /**
+             * Cache Read Input Tokens
+             * @default 0
+             */
+            cache_read_input_tokens?: number;
+            /**
+             * Input Tokens
+             * @default 0
+             */
+            input_tokens?: number;
+            /**
+             * Output Tokens
+             * @default 0
+             */
+            output_tokens?: number;
         };
         /** CandidateResponse */
         CandidateResponse: {
@@ -1027,10 +1158,6 @@ export interface components {
             last_abstain_reason?: string | null;
             /** Metrics */
             metrics: {
-                [key: string]: unknown;
-            };
-            /** Metrics Display */
-            metrics_display: {
                 [key: string]: unknown;
             };
             /** Model Selected */
@@ -1563,8 +1690,6 @@ export interface components {
             symbol: string;
             /** Total Return */
             total_return?: number | null;
-            /** Total Return Pct */
-            total_return_pct?: number | null;
             /** Total Trades */
             total_trades?: number | null;
             /**
@@ -1716,8 +1841,6 @@ export interface components {
             symbol: string;
             /** Total Return */
             total_return?: number | null;
-            /** Total Return Pct */
-            total_return_pct?: number | null;
             /** Total Trades */
             total_trades?: number | null;
             /**
@@ -1831,10 +1954,6 @@ export interface components {
             fold: number;
             /** Metrics */
             metrics: {
-                [key: string]: unknown;
-            };
-            /** Metrics Display */
-            metrics_display: {
                 [key: string]: unknown;
             };
         };
@@ -2050,6 +2169,145 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WalkForwardResponse"];
+                };
+            };
+            /** @description unauthorized (API_TOKEN set, token missing or wrong) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description unknown_symbol / no_data / not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description validation_error / unknown_pattern / insufficient_data */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description busy: another heavy request is running */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description internal_error / contract_violation */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description data_quality */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    get_briefing_api_briefing_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BriefingResponse"];
+                };
+            };
+            /** @description unauthorized (API_TOKEN set, token missing or wrong) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description unknown_symbol / no_data / not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description validation_error / unknown_pattern / insufficient_data */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description internal_error / contract_violation */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description data_quality */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    regenerate_briefing_api_briefing_regenerate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BriefingResponse"];
                 };
             };
             /** @description unauthorized (API_TOKEN set, token missing or wrong) */

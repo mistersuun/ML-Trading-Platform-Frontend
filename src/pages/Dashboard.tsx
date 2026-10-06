@@ -92,7 +92,7 @@ export default function Dashboard() {
                 </thead>
                 <tbody>
                   {signals.map((s, i) => {
-                    const ret = s.total_return ?? s.total_return_pct;
+                    const ret = s.total_return;
                     return (
                       <tr key={i} className="border-t" style={{ borderColor: 'var(--border)' }}>
                         <td className="p-3 font-mono font-semibold">{s.symbol}</td>

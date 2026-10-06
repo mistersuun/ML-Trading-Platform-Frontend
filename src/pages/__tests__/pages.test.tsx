@@ -59,15 +59,15 @@ describe('smoke', () => {
 })
 
 describe('bug pinning', () => {
-  // FE-1: backend sends total_return_pct as a fraction (0.153); Dashboard prints it without *100
-  it('FE-1 Dashboard shows 15.3% for total_return_pct 0.153', async () => {
+  // FE-1: backend sends total_return as a fraction (0.153); Dashboard prints it without *100
+  it('FE-1 Dashboard shows 15.3% for total_return 0.153', async () => {
     render(<Dashboard />)
     await userEvent.click(screen.getByRole('button', { name: /run scan now/i }))
     await screen.findByText('AAPL')
     expect(screen.getByText(/15\.3/)).toBeInTheDocument()
   })
 
-  // FE-2: backtest sends total_return / max_drawdown; frontend reads *_pct keys
+  // FE-2: backtest sends total_return / max_drawdown
   it('FE-2 PairsTrading backtest cards show 8.0% and -12.0%', async () => {
     render(<PairsTrading />)
     await screen.findByRole('option', { name: 'KO / PEP' })

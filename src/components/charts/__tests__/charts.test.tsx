@@ -241,7 +241,7 @@ describe('BulletBar', () => {
     const { container } = render(
       <BulletBar value={1.4} max={10} status="fail" valueLabel="Now −1.4%"
         marks={[{ at: 5, label: '−5%', sub: 'risk ×0.5' }, { at: 10, label: '−10%', sub: 'halt', align: 'right' }]} ariaLabel="dd" />)
-    expect(container.querySelector<HTMLElement>('[data-role="fill"]')!.style.background).toMatch(/232|e8766d/i)
+    expect(container.querySelector<HTMLElement>('[data-role="fill"]')!.style.background).toMatch(/var\(--down\)/)
     expect(container).toHaveTextContent('Now −1.4%')
     expect(container).toHaveTextContent('halt')
     expectClean(container)
@@ -262,8 +262,8 @@ describe('Histogram', () => {
     const { container } = render(<Histogram values={values} binCount={7} ariaLabel="Return per trade" noun="trades" format={(v) => `${v.toFixed(0)}%`} />)
     const bins = container.querySelectorAll<HTMLElement>('[data-role="bin"]')
     expect(bins).toHaveLength(7)
-    expect(bins[0].style.background).toMatch(/232, 118, 109|#e8766d/i) // down
-    expect(bins[6].style.background).toMatch(/79, 167, 122|#4fa77a/i) // up
+    expect(bins[0].style.background).toMatch(/var\(--down\)/) // down
+    expect(bins[6].style.background).toMatch(/var\(--up\)/) // up
     const total = Array.from(bins).reduce((n, b) => n + Number(b.title.split(' ')[0]), 0)
     expect(total).toBe(values.length)
     expect(container).toHaveTextContent('−3%'.replace('−', '-'))

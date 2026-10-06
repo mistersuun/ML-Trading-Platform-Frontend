@@ -8,13 +8,15 @@ import KeyValueList from '../components/ui/KeyValueList';
 import PageHeader from '../components/ui/PageHeader';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorPanel from '../components/ErrorPanel';
-import { T } from '../lib/tokens';
+import { currentPalette, useResolvedTheme } from '../lib/theme';
 import { plotlyLayout, plotlyConfig, seriesColor } from '../lib/plotlyTheme';
 import { int, num, pct, signColor } from '../lib/format';
 import { blockHalfLife, blockStatus, blockWindow, exitReasonRows, oosTitle, type PairsWalkForward } from './pairsModel';
 
 
 export default function PairsTrading() {
+  useResolvedTheme(); // Plotly takes resolved colours: re-render on theme change
+  const P = currentPalette();
   const { data: pairsData, error: pairsError, isPending: pairsLoading, refetch: refetchPairs } = usePairs();
   const retryPairs = () => void refetchPairs();
   const pairs = pairsData?.pairs ?? [];
@@ -117,17 +119,17 @@ export default function PairsTrading() {
                   {
                     type: 'scatter', mode: 'lines',
                     x: [spreadData[0]?.date, spreadData[spreadData.length - 1]?.date],
-                    y: [2, 2], name: 'Entry +2σ', line: { color: T.down, dash: 'dash', width: 1 },
+                    y: [2, 2], name: 'Entry +2σ', line: { color: P.down, dash: 'dash', width: 1 },
                   },
                   {
                     type: 'scatter', mode: 'lines',
                     x: [spreadData[0]?.date, spreadData[spreadData.length - 1]?.date],
-                    y: [-2, -2], name: 'Entry -2σ', line: { color: T.up, dash: 'dash', width: 1 },
+                    y: [-2, -2], name: 'Entry -2σ', line: { color: P.up, dash: 'dash', width: 1 },
                   },
                   {
                     type: 'scatter', mode: 'lines',
                     x: [spreadData[0]?.date, spreadData[spreadData.length - 1]?.date],
-                    y: [0, 0], name: 'Mean', line: { color: T.text3, dash: 'dot', width: 1 },
+                    y: [0, 0], name: 'Mean', line: { color: P.text3, dash: 'dot', width: 1 },
                   },
                 ]}
                 layout={plotlyLayout({ title: 'Z-Score of Spread', height: 350, legend: true }) as never}
@@ -147,10 +149,10 @@ export default function PairsTrading() {
               </p>
               <p className="font-semibold mb-3" data-testid="pairs-oos-title">{oosTitle(bt)}</p>
               <KeyValueList layout="grid" columns={4} items={[
-  { label: 'Total Return', value: pct(bt.total_return ?? bt.total_return_pct), color: signColor(bt.total_return ?? bt.total_return_pct) },
+  { label: 'Total Return', value: pct(bt.total_return), color: signColor(bt.total_return) },
   { label: 'Trades', value: bt.total_trades ?? 'n/a' },
   { label: 'Win Rate', value: pct(bt.win_rate) },
-  { label: 'Max Drawdown', value: pct(bt.max_drawdown ?? bt.max_drawdown_pct), color: "var(--down)" },
+  { label: 'Max Drawdown', value: pct(bt.max_drawdown), color: "var(--down)" },
   ...(bt.psr !== undefined ? [{ label: 'PSR (out of sample)', value: num(bt.psr, 3) }] : []),
   ...(bt.oos_significant != null ? [{ label: 'Significant', value: bt.oos_significant ? 'YES' : 'NO', color: bt.oos_significant ? 'var(--up)' : 'var(--text-1)' }] : []),
   ...(bt.latest_block_tradable != null ? [{ label: 'Latest block tradable', value: bt.latest_block_tradable ? 'YES' : 'NO', color: bt.latest_block_tradable ? 'var(--up)' : 'var(--warn)' }] : []),

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { BrowserRouter, Routes, Route, NavLink, useLocation } from 'react-router-dom';
 import ErrorBoundary from './components/ErrorBoundary';
+import ThemeToggle from './components/ui/ThemeToggle';
 import { HeaderSlotContext } from './components/ui/headerSlot';
 import Overview from './pages/Overview';
 import TechnicalScanner from './pages/TechnicalScanner';
@@ -57,6 +58,7 @@ export default function App() {
             </NavLink>
           ))}
           <div className="side-foot" style={{ padding: '16px 12px 0', color: 'var(--text-3)', fontSize: 12 }}>
+            <div style={{ marginBottom: 10 }}><ThemeToggle compact /></div>
             Paper trading only. Not financial advice.
           </div>
         </nav>

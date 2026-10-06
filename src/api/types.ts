@@ -20,12 +20,10 @@ export interface Metrics {
   total_trades?: number | null;
 }
 
-/** Pairs backtest summary (free-form dict in the schema; legacy *_pct names kept). */
+/** Pairs backtest summary (free-form dict in the schema). */
 export interface PairsBacktest {
   total_return?: number | null;
-  total_return_pct?: number | null;
   max_drawdown?: number | null;
-  max_drawdown_pct?: number | null;
   total_trades?: number | null;
   win_rate?: number | null;
 }
