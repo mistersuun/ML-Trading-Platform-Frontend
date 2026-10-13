@@ -1,40 +1,34 @@
-import { useState } from 'react';
-import { scanPatterns } from '../api/client';
-import MetricCard from '../components/MetricCard';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { ApiError, scanPatterns } from '../api/client';
+import { LATEST_SCAN_KEY, useLatestScan } from '../api/hooks';
+import type { ScanSignal } from '../api/types';
+import PageHeader from '../components/ui/PageHeader';
+import KeyValueList from '../components/ui/KeyValueList';
 import LoadingSpinner from '../components/LoadingSpinner';
-
-interface Signal {
-  symbol: string;
-  pattern: string;
-  signal: string;
-  signal_date: string;
-  days_ago: number;
-  price: number;
-  win_rate: number;
-  profit_factor: number;
-  sharpe: number;
-  total_return_pct: number;
-  total_trades: number;
-  is_valid: boolean;
-}
+import ErrorPanel from '../components/ErrorPanel';
+import { num, pct, usd, signColor } from '../lib/format';
 
 export default function Dashboard() {
-  const [signals, setSignals] = useState<Signal[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [scanned, setScanned] = useState(false);
-
-  const handleScan = async () => {
-    setLoading(true);
-    try {
-      const res = await scanPatterns();
-      setSignals(res.data.signals || []);
-      setScanned(true);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const qc = useQueryClient();
+  const latest = useLatestScan();
+  const scan = useMutation({
+    mutationFn: () => scanPatterns(),
+    // A live scan replaces the displayed nightly result until the next reload.
+    onSuccess: (res) => {
+      qc.setQueryData(LATEST_SCAN_KEY, {
+        kind: 'technical', payload: res.signals, generated_at: new Date().toISOString(), age_hours: 0, stale: false,
+      });
+    },
+  });
+  const loading = scan.isPending;
+  const noNightly = latest.error instanceof ApiError && latest.error.status === 404;
+  // 404 = no nightly run stored yet: an empty state, not an error.
+  const error = scan.error ?? (noNightly ? null : latest.error);
+  const retry = () => (scan.error ? scan.mutate() : void latest.refetch());
+  const signals: ScanSignal[] = latest.data?.payload ?? [];
+  const scanned = latest.data !== undefined;
+  const generatedAt = latest.data ? new Date(latest.data.generated_at) : null;
+  const stale = latest.data?.stale ?? false;
 
   const buys = signals.filter((s) => s.signal === 'BUY');
   const sells = signals.filter((s) => s.signal === 'SELL');
@@ -42,36 +36,48 @@ export default function Dashboard() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold">Dashboard</h2>
-        <button
-          onClick={handleScan}
-          disabled={loading}
-          className="px-6 py-2 rounded font-semibold text-black transition-opacity disabled:opacity-50"
-          style={{ background: 'var(--accent-green)' }}
-        >
-          {loading ? 'Scanning...' : 'Run Full Scan'}
-        </button>
-      </div>
+      <PageHeader
+        title="Dashboard"
+        actions={
+          <button
+            onClick={() => { if (!scan.isPending) scan.mutate(); }}
+            disabled={loading}
+            className="btn btn-primary"
+          >
+            {loading ? 'Scanning...' : 'Run scan now'}
+          </button>
+        }
+      />
+
+      {generatedAt && !loading && (
+        <p className="text-sm mb-4 flex items-center gap-2" style={{ color: 'var(--text-2)' }}>
+          <span>Latest scan: {generatedAt.toLocaleString()}</span>
+          {stale && (
+            <span role="status" style={{ color: 'var(--warn)' }}><span aria-hidden="true">! </span>STALE</span>
+          )}
+        </p>
+      )}
 
       {loading && <LoadingSpinner text="Scanning all markets and patterns... this may take a few minutes" />}
 
+      {error && !loading && <ErrorPanel error={error} onRetry={retry} />}
+
       {scanned && !loading && (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <MetricCard label="Total Signals" value={signals.length} color="var(--accent-blue)" />
-            <MetricCard label="Buy Signals" value={buys.length} color="var(--accent-green)" />
-            <MetricCard label="Sell Signals" value={sells.length} color="var(--accent-red)" />
-            <MetricCard label="Validated" value={valid.length} color="var(--accent-yellow)" />
-          </div>
+          <div className="panel mb-6"><KeyValueList layout="grid" columns={4} items={[
+  { label: 'Total Signals', value: signals.length, color: "var(--accent)" },
+  { label: 'Buy Signals', value: buys.length, color: "var(--up)" },
+  { label: 'Sell Signals', value: sells.length, color: "var(--down)" },
+  { label: 'Validated', value: valid.length, color: "var(--warn)" },
+]} /></div>
 
           {signals.length === 0 ? (
-            <p style={{ color: 'var(--text-secondary)' }}>No signals detected in the last 30 days.</p>
+            <p style={{ color: 'var(--text-2)' }}>No signals detected in the last 30 days.</p>
           ) : (
             <div className="overflow-x-auto rounded-lg" style={{ border: '1px solid var(--border)' }}>
               <table className="w-full text-sm">
                 <thead>
-                  <tr style={{ background: 'var(--bg-secondary)' }}>
+                  <tr style={{ background: 'var(--panel)' }}>
                     <th className="text-left p-3">Symbol</th>
                     <th className="text-left p-3">Pattern</th>
                     <th className="text-left p-3">Signal</th>
@@ -85,26 +91,29 @@ export default function Dashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {signals.map((s, i) => (
-                    <tr key={i} className="border-t" style={{ borderColor: 'var(--border)' }}>
-                      <td className="p-3 font-mono font-semibold">{s.symbol}</td>
-                      <td className="p-3" style={{ color: 'var(--text-secondary)' }}>{s.pattern}</td>
-                      <td className="p-3 font-bold" style={{ color: s.signal === 'BUY' ? 'var(--accent-green)' : 'var(--accent-red)' }}>
-                        {s.signal}
-                      </td>
-                      <td className="p-3 text-right font-mono">${s.price.toFixed(2)}</td>
-                      <td className="p-3 text-right" style={{ color: s.days_ago <= 3 ? 'var(--accent-green)' : 'var(--text-secondary)' }}>
-                        {s.days_ago}d ago
-                      </td>
-                      <td className="p-3 text-right">{(s.win_rate * 100).toFixed(1)}%</td>
-                      <td className="p-3 text-right">{s.sharpe.toFixed(2)}</td>
-                      <td className="p-3 text-right">{s.profit_factor.toFixed(2)}</td>
-                      <td className="p-3 text-right" style={{ color: s.total_return_pct >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
-                        {s.total_return_pct.toFixed(1)}%
-                      </td>
-                      <td className="p-3 text-center">{s.is_valid ? '✅' : '❌'}</td>
-                    </tr>
-                  ))}
+                  {signals.map((s, i) => {
+                    const ret = s.total_return;
+                    return (
+                      <tr key={i} className="border-t" style={{ borderColor: 'var(--border)' }}>
+                        <td className="p-3 font-mono font-semibold">{s.symbol}</td>
+                        <td className="p-3" style={{ color: 'var(--text-2)' }}>{s.pattern}</td>
+                        <td className="p-3 font-bold" style={{ color: s.signal === 'BUY' ? 'var(--up)' : 'var(--down)' }}>
+                          {s.signal}
+                        </td>
+                        <td className="p-3 text-right font-mono">{usd(s.price)}</td>
+                        <td className="p-3 text-right" style={{ color: s.days_ago <= 3 ? 'var(--up)' : 'var(--text-2)' }}>
+                          {s.days_ago}d ago
+                        </td>
+                        <td className="p-3 text-right">{pct(s.win_rate)}</td>
+                        <td className="p-3 text-right">{num(s.sharpe)}</td>
+                        <td className="p-3 text-right">{num(s.profit_factor)}</td>
+                        <td className="p-3 text-right" style={{ color: signColor(ret) }}>
+                          {pct(ret)}
+                        </td>
+                        <td className="p-3 text-center">{s.is_valid ? '✅' : '❌'}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -112,9 +121,11 @@ export default function Dashboard() {
         </>
       )}
 
-      {!scanned && !loading && (
-        <div className="text-center py-20" style={{ color: 'var(--text-secondary)' }}>
-          <p className="text-lg mb-2">Click "Run Full Scan" to scan all markets for pattern signals.</p>
+      {latest.isPending && !scanned && !loading && <LoadingSpinner text="Loading latest scan..." />}
+
+      {!scanned && !loading && !error && !latest.isPending && (
+        <div className="text-center py-20" style={{ color: 'var(--text-2)' }}>
+          <p className="text-lg mb-2">No nightly scan results yet. Click "Run scan now" to scan all markets for pattern signals.</p>
           <p className="text-sm">Scans the last 30 days across all watchlist symbols and 20 patterns.</p>
         </div>
       )}

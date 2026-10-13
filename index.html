@@ -5,6 +5,17 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>frontend</title>
+    <script>
+      // Set data-theme before first paint so there is no flash. Mirrors src/lib/theme.ts.
+      (function () {
+        var t = 'system';
+        try { var s = localStorage.getItem('theme'); if (s === 'dark' || s === 'light') t = s; } catch (e) {}
+        if (t === 'system') {
+          try { t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'; } catch (e) { t = 'dark'; }
+        }
+        document.documentElement.setAttribute('data-theme', t);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

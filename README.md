@@ -71,3 +71,7 @@ export default defineConfig([
   },
 ])
 ```
+
+## Bug-pin tests
+
+`it.fails` passes on ANY thrown error, so after fixing a pinned bug (FE-1..FE-3) change `it.fails` to `it` and confirm the test passes; do not rely on the suite going red.
